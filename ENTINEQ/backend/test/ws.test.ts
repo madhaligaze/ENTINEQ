@@ -78,7 +78,7 @@ describe("прокладка WebSocket между браузером и ядро
   it("мусорные сообщения отклоняются в прокладке и до ядра не доходят", async () => {
     const user = await register(h);
     const socket = await browserSocket(h, user.cookie);
-    // Сначала один нормальный ход: после него соединение с ядром точно установлено и его запись — последняя.
+    // Сначала один нормальный ход: после него соединение с ядром точно установлено и его запись - последняя.
     expect(kinds(await socket.turn({ text: "старт" }))).toContain("text");
     const record = h.core.ws.at(-1)!;
     const before = record.received.length;
@@ -111,14 +111,14 @@ describe("прокладка WebSocket между браузером и ядро
     socket.close();
   });
 
-  it("если ядро закрывает соединение кодом 4401 — браузер получает 4401 (интерфейс покажет вход)", async () => {
+  it("если ядро закрывает соединение кодом 4401 - браузер получает 4401 (интерфейс покажет вход)", async () => {
     const user = await register(h);
     const socket = await browserSocket(h, user.cookie);
     socket.ws.send(JSON.stringify({ type: "user", text: "[[4401]]" }));
     expect(await socket.closed).toBe(4401);
   });
 
-  it("если ядро не узнаёт токен — 4401", async () => {
+  it("если ядро не узнаёт токен - 4401", async () => {
     const socket = await browserSocket(h, "unknown-token-0123456789-abcdef");
     expect(await socket.closed).toBe(4401);
   });
@@ -169,7 +169,7 @@ describe("прокладка WebSocket между браузером и ядро
     const user = await register(h);
     const socket = await browserSocket(h, user.cookie);
     socket.ws.send("x".repeat(70_000));
-    // 1009 — «слишком большое сообщение»; клиент может увидеть и 1006, если TCP закрылся сразу вслед за кадром закрытия.
+    // 1009 - «слишком большое сообщение»; клиент может увидеть и 1006, если TCP закрылся сразу вслед за кадром закрытия.
     expect([1006, 1009]).toContain(await socket.closed);
   });
 

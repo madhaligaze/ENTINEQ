@@ -5,8 +5,9 @@ const os = require("node:os");
 const { chromium } = require("playwright");
 const { check, recreateDb, start, stopAll, summary } = require("./lib.cjs");
 
-const CORE_DIR = path.resolve(__dirname, "..", "ENTINEQ_AGENT");
-const PORT = 18090;
+const APP = path.resolve(__dirname, "..", "ENTINEQ_AGENT");
+const BACK_PORT = 18090;
+const PORT = 18091; // фронтенд - его и открывает браузер
 const OWNER = { email: "owner@e2e.test", password: "owner-password-123" };
 
 (async () => {
@@ -14,20 +15,28 @@ const OWNER = { email: "owner@e2e.test", password: "owner-password-123" };
   const dataDir = path.join(os.tmpdir(), "entineq-e2e-cookie-data");
   fs.rmSync(dataDir, { recursive: true, force: true });
   await start(
-    "core",
-    CORE_DIR,
+    "agent-backend",
+    path.join(APP, "backend"),
     ["dist/server.js"],
     {
       NODE_ENV: "production", // COOKIE_SECURE намеренно не задан: по умолчанию в production cookie получает флаг Secure
-      PORT: String(PORT),
+      PORT: String(BACK_PORT),
       DATABASE_URL: databaseUrl,
       INTERNAL_API_SECRET: "e2e-internal-secret-0123456789abcdef0123456789",
       AGENT_RUNNER: "fake",
       OWNER_EMAIL: OWNER.email,
       OWNER_PASSWORD: OWNER.password,
+      ALLOWED_ORIGINS: `http://localhost:${PORT},http://127.0.0.1:${PORT}`,
       DATA_DIR: dataDir,
       LOG_LEVEL: "error",
     },
+    `http://127.0.0.1:${BACK_PORT}/healthz`,
+  );
+  await start(
+    "agent-frontend",
+    path.join(APP, "frontend"),
+    ["dist/server.js"],
+    { NODE_ENV: "production", PORT: String(PORT), BACKEND_URL: `http://127.0.0.1:${BACK_PORT}`, TRUST_PROXY_HOPS: "0", LOG_LEVEL: "error" },
     `http://127.0.0.1:${PORT}/healthz`,
   );
   const browser = await chromium.launch();

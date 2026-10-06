@@ -1,6 +1,13 @@
 # Вся связка локально одной командой:  docker compose up --build
-#   ENTINEQ_AGENT (ядро и интерфейс доверенных):  http://localhost:8080
-#   ENTINEQ (публичное приложение):               http://localhost:8081
+# Пять сервисов - ровно как в Railway (четыре репозитория + Postgres):
+#
+#   браузер ─▶ agent-frontend ─▶ agent-backend ─▶ db (PostgreSQL)
+#   браузер ─▶ public-frontend ─▶ public-backend ─▶ agent-backend
+#
+#   ENTINEQ_AGENT (владелец и доверенные):  http://localhost:8080
+#   ENTINEQ (публичное приложение):         http://localhost:8081
+# Бэкенды наружу не публикуются - достучаться до них можно только через фронтенды (закрытый контур).
+#
 # По умолчанию вместо Claude отвечает заглушка (бесплатно). Для настоящего Claude создайте рядом файл .env:
 #   AGENT_RUNNER=claude
 #   ANTHROPIC_API_KEY=sk-ant-...
@@ -20,13 +27,11 @@ services:
       timeout: 3s
       retries: 12
 
-  agent:
-    build: ./ENTINEQ_AGENT
+  agent-backend:
+    build: ./ENTINEQ_AGENT/backend
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8080:8080"
     environment:
       DATABASE_URL: postgres://entineq:entineq@db:5432/entineq
       INTERNAL_API_SECRET: local-dev-shared-secret-change-me-0123456789abcdef
@@ -34,22 +39,41 @@ services:
       OWNER_PASSWORD: ${OWNER_PASSWORD:-owner-password-123}
       AGENT_RUNNER: ${AGENT_RUNNER:-fake}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Адрес, который браузер видит у фронтенда (его присылает в заголовке Origin).
+      ALLOWED_ORIGINS: http://localhost:8080
       # Локально открываем по http://localhost, поэтому cookie без флага Secure. В продакшене (https) этой строки нет.
       COOKIE_SECURE: "false"
-      TRUST_PROXY_HOPS: "0"
     volumes:
       - entineq-agent-data:/data
 
-  public:
-    build: ./ENTINEQ
+  agent-frontend:
+    build: ./ENTINEQ_AGENT/frontend
     depends_on:
-      - agent
+      - agent-backend
+    ports:
+      - "8080:8080"
+    environment:
+      BACKEND_URL: http://agent-backend:8080
+      TRUST_PROXY_HOPS: "0"
+
+  public-backend:
+    build: ./ENTINEQ/backend
+    depends_on:
+      - agent-backend
+    environment:
+      AGENT_BASE_URL: http://agent-backend:8080
+      INTERNAL_API_SECRET: local-dev-shared-secret-change-me-0123456789abcdef
+      ALLOWED_ORIGINS: http://localhost:8081
+      COOKIE_SECURE: "false"
+
+  public-frontend:
+    build: ./ENTINEQ/frontend
+    depends_on:
+      - public-backend
     ports:
       - "8081:8080"
     environment:
-      AGENT_BASE_URL: http://agent:8080
-      INTERNAL_API_SECRET: local-dev-shared-secret-change-me-0123456789abcdef
-      COOKIE_SECURE: "false"
+      BACKEND_URL: http://public-backend:8080
       TRUST_PROXY_HOPS: "0"
 
 volumes:

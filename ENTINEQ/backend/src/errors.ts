@@ -4,7 +4,7 @@ export class AppError extends Error {
     public readonly code: string,
     message: string,
     public readonly status = 400,
-    /** Когда снимется ограничение (ISO-время) — для лимитов, чтобы интерфейс показал таймер. */
+    /** Когда снимется ограничение (ISO-время) - для лимитов, чтобы интерфейс показал таймер. */
     public readonly resetsAt?: string,
   ) {
     super(message);

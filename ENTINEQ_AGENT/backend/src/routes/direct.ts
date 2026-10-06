@@ -10,7 +10,7 @@ import { assertSameOrigin, clearSessionCookie, csrfHook, SESSION_COOKIE, setSess
 
 /**
  * «Прямая дверь»: собственный интерфейс ENTINEQ_AGENT для владельца и доверенных людей.
- * Вход по паролю, сессия — в httpOnly-cookie.
+ * Вход по паролю, сессия - в httpOnly-cookie.
  */
 export async function registerDirect(app: FastifyInstance, ctx: AppContext): Promise<void> {
   const { cfg, auth, chat } = ctx;

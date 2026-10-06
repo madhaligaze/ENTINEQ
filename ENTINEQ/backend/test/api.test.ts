@@ -87,7 +87,7 @@ describe("регистрация и вход", () => {
 });
 
 describe("сессия", () => {
-  it("/me без cookie — 401 без обращения к ядру", async () => {
+  it("/me без cookie - 401 без обращения к ядру", async () => {
     const result = await call(h, "GET", "/api/me");
     expect(result.status).toBe(401);
     expect(result.json.error.code).toBe("unauthorized");
@@ -105,7 +105,7 @@ describe("сессия", () => {
     expect(forwarded.headers.authorization).toBe(`Bearer ${SECRET}`);
   });
 
-  it("если ядро не узнаёт токен — 401 и cookie стирается", async () => {
+  it("если ядро не узнаёт токен - 401 и cookie стирается", async () => {
     const result = await call(h, "GET", "/api/me", { cookie: "stale-token-0123456789-abcdef" });
     expect(result.status).toBe(401);
     expect(result.cookies[SESSION_COOKIE]!.attrs).toMatch(/expires=thu, 01 jan 1970|max-age=0/);
@@ -259,7 +259,7 @@ describe("защита запросов", () => {
 });
 
 describe("чистый API и заголовки", () => {
-  it("корень — служебный JSON, страниц нет; заголовки безопасности на месте", async () => {
+  it("корень - служебный JSON, страниц нет; заголовки безопасности на месте", async () => {
     const root = await call(h, "GET", "/");
     expect(root.status).toBe(200);
     expect(root.json).toEqual({ service: "entineq-backend", ok: true });
@@ -270,7 +270,7 @@ describe("чистый API и заголовки", () => {
     for (const page of ["/index.html", "/js/main.js", "/styles.css"]) expect((await call(h, "GET", page)).status).toBe(404);
   });
 
-  it("неизвестные адреса — одинаковый JSON, в ответах нет внутренностей; внутреннее API ядра наружу не проброшено", async () => {
+  it("неизвестные адреса - одинаковый JSON, в ответах нет внутренностей; внутреннее API ядра наружу не проброшено", async () => {
     for (const url of ["/api/нет", "/нет-такой", "/.env", "/internal/me"]) {
       const result = await call(h, "GET", url);
       expect(result.status).toBe(404);

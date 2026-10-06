@@ -100,7 +100,7 @@ export function proxyChat(browser: WebSocket, req: FastifyRequest, cfg: Config, 
     try {
       if ((JSON.parse(text) as { kind?: string }).kind === "done") turnsInFlight = Math.max(0, turnsInFlight - 1);
     } catch {
-      // Не JSON — пересылаем как есть.
+      // Не JSON - пересылаем как есть.
     }
     if (browser.readyState === WebSocket.OPEN) browser.send(text);
   });
@@ -114,7 +114,7 @@ export function proxyChat(browser: WebSocket, req: FastifyRequest, cfg: Config, 
     failToBrowser("Нет связи с сервером. Попробуйте чуть позже.");
   });
   upstream.on("close", (code) => {
-    // 4401 — ядро сообщает, что сессия недействительна: передаём как есть, интерфейс покажет вход.
+    // 4401 - ядро сообщает, что сессия недействительна: передаём как есть, интерфейс покажет вход.
     finish(code === CLOSE_UNAUTHORIZED ? CLOSE_UNAUTHORIZED : CLOSE_UPSTREAM, code === CLOSE_UNAUTHORIZED ? "unauthorized" : "upstream closed");
   });
 }

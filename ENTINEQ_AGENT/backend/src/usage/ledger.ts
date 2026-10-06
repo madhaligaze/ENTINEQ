@@ -29,7 +29,7 @@ export function normalizeModelUsage(raw: unknown): Snapshot {
   return snapshot;
 }
 
-/** Нулевой результат приходит при сбое процесса SDK — его нельзя принимать за новую «точку отсчёта». */
+/** Нулевой результат приходит при сбое процесса SDK - его нельзя принимать за новую «точку отсчёта». */
 export function isZeroSnapshot(snapshot: Snapshot): boolean {
   return Object.values(snapshot).every((totals) => COUNTERS.every((field) => totals[field] === 0));
 }
@@ -49,11 +49,11 @@ export type UsageMode = "first" | "cumulative" | "restart";
 /**
  * Накопительные ли итоги `next` относительно `prev`?
  *
- * Документация SDK: при продолжении сессии итоги берутся из сохранённого транскрипта — «если он есть».
+ * Документация SDK: при продолжении сессии итоги берутся из сохранённого транскрипта - «если он есть».
  * Если итогов в транскрипте не оказалось (например, сессию восстановили в другом контейнере), SDK считает
  * с нуля, и вычитание прошлых итогов дало бы потерю расхода. Различаем так: `callTokens` (поле `usage`
- * результата) — токены именно этого вызова. При накопительных итогах их прирост не меньше `callTokens`;
- * если он заметно меньше — итоги начались заново.
+ * результата) - токены именно этого вызова. При накопительных итогах их прирост не меньше `callTokens`;
+ * если он заметно меньше - итоги начались заново.
  */
 export function classifyUsage(prev: Snapshot, next: Snapshot, callTokens?: number): UsageMode {
   if (Object.keys(prev).length === 0) return "first";
@@ -252,7 +252,7 @@ export function turnBudgetUsd(status: LimitStatus): number | undefined {
 
 /**
  * Открывает окно сессии, если прошлое закончилось (или его не было). Окно стартует с первого
- * сообщения и длится фиксированное время; запрос атомарный — две вкладки не откроют два окна.
+ * сообщения и длится фиксированное время; запрос атомарный - две вкладки не откроют два окна.
  */
 export async function openWindow(db: Db, userId: string, windowHours: number, now: Date): Promise<Date> {
   const expiredBefore = new Date(now.getTime() - windowHours * 3_600_000);
@@ -278,7 +278,7 @@ export async function recordTurnUsage(
     windowStart: Date;
     /** Момент записи (по тем же часам, что и лимиты). */
     at: Date;
-    /** Токены самого этого вызова (поле usage результата SDK) — по ним определяется, накопительные ли итоги. */
+    /** Токены самого этого вызова (поле usage результата SDK) - по ним определяется, накопительные ли итоги. */
     callTokens?: number;
   },
 ): Promise<{ deltaUsd: number; mode: UsageMode | "ignored" }> {

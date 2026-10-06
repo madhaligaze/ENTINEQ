@@ -7,7 +7,7 @@ const newPassword = z
   .string()
   .min(PASSWORD_MIN, `Пароль: минимум ${PASSWORD_MIN} символов`)
   .max(PASSWORD_MAX, `Пароль: максимум ${PASSWORD_MAX} символов`);
-/** Деньги в долларах. null — «без лимита». */
+/** Деньги в долларах. null - «без лимита». */
 const money = z.number().min(0).max(1_000_000);
 
 export const loginBody = z.object({ email, password: z.string().min(1).max(PASSWORD_MAX) });

@@ -1,12 +1,16 @@
-/* Сквозной тест интерфейса ENTINEQ_AGENT: настоящий браузер, настоящий Postgres, заглушка вместо Claude. */
+/*
+ * Сквозной тест интерфейса ENTINEQ_AGENT: настоящий браузер, настоящий Postgres, заглушка вместо Claude.
+ * Поднимаются два сервиса: бэкенд (ENTINEQ_AGENT/backend) и фронтенд (ENTINEQ_AGENT/frontend), браузер ходит только на фронтенд.
+ */
 const path = require("node:path");
 const fs = require("node:fs");
 const { chromium } = require("playwright");
 const { check, recreateDb, shot, sleep, start, stopAll, summary, watchPage } = require("./lib.cjs");
 
-const CORE_DIR = path.resolve(__dirname, "..", "ENTINEQ_AGENT");
-const PORT = 18080;
-const BASE = `http://127.0.0.1:${PORT}`;
+const APP = path.resolve(__dirname, "..", "ENTINEQ_AGENT");
+const BACK_PORT = 18080;
+const FRONT_PORT = 18082;
+const BASE = `http://127.0.0.1:${FRONT_PORT}`;
 const OWNER = { email: "owner@e2e.test", password: "owner-password-123" };
 const problems = [];
 
@@ -15,21 +19,35 @@ const problems = [];
   const dataDir = path.join(require("node:os").tmpdir(), "entineq-e2e-core-data");
   fs.rmSync(dataDir, { recursive: true, force: true });
   await start(
-    "core",
-    CORE_DIR,
+    "agent-backend",
+    path.join(APP, "backend"),
     ["dist/server.js"],
     {
       NODE_ENV: "production",
-      PORT: String(PORT),
+      PORT: String(BACK_PORT),
       DATABASE_URL: databaseUrl,
       INTERNAL_API_SECRET: "e2e-internal-secret-0123456789abcdef0123456789",
       AGENT_RUNNER: "fake",
       OWNER_EMAIL: OWNER.email,
       OWNER_PASSWORD: OWNER.password,
+      ALLOWED_ORIGINS: BASE,
       COOKIE_SECURE: "false",
       DATA_DIR: dataDir,
       LOG_LEVEL: "warn",
-      RATE_LIMIT_LOGIN_PER_MIN: "1000",
+    },
+    `http://127.0.0.1:${BACK_PORT}/healthz`,
+  );
+  await start(
+    "agent-frontend",
+    path.join(APP, "frontend"),
+    ["dist/server.js"],
+    {
+      NODE_ENV: "production",
+      PORT: String(FRONT_PORT),
+      BACKEND_URL: `http://127.0.0.1:${BACK_PORT}`,
+      TRUST_PROXY_HOPS: "0",
+      LOG_LEVEL: "warn",
+      RATE_LIMIT_AUTH_PER_MIN: "1000",
       RATE_LIMIT_WS_PER_MIN: "1000",
     },
     `${BASE}/healthz`,

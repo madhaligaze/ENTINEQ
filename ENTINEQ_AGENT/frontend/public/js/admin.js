@@ -5,7 +5,7 @@ import { fmtDateTime, fmtTokens, fmtUsd } from "./format.js";
 const ROLE_LABEL = { owner: "владелец", trusted: "доверенный", public: "публичный" };
 const STATUS_LABEL = { active: "действует", used: "использовано", revoked: "отозвано", expired: "истекло" };
 
-/** Пустое поле — «не задано» (null), иначе неотрицательное число. */
+/** Пустое поле - «не задано» (null), иначе неотрицательное число. */
 function readMoney(input, label) {
   const raw = input.value.trim().replace(",", ".");
   if (raw === "") return null;
@@ -95,7 +95,6 @@ export function mountAdmin(root) {
         ? null
         : el("button", {
             type: "button",
-            class: user.isActive ? "danger" : "",
             text: user.isActive ? "Отключить" : "Включить",
             onclick: guard(async () => {
               await api("PATCH", `/api/admin/users/${user.id}`, { isActive: !user.isActive });
@@ -134,7 +133,8 @@ export function mountAdmin(root) {
       {},
       el("td", { text: user.email }),
       el("td", {}, el("span", { class: "badge", text: ROLE_LABEL[user.role] ?? user.role })),
-      el("td", {}, el("span", { class: `badge ${user.isActive ? "ok" : "off"}`, text: user.isActive ? "активен" : "отключён" })),
+      // Цвет только для отказа: «активен» остаётся нейтральным, «отключён» красным.
+      el("td", {}, el("span", { class: user.isActive ? "badge" : "badge off", text: user.isActive ? "активен" : "отключён" })),
       el("td", { class: "num", text: fmtUsd(user.spentThisMonthUsd) }),
       el("td", {}, monthly),
       el("td", {}, windowLimit),
@@ -186,7 +186,7 @@ export function mountAdmin(root) {
       notify("Коды скопированы");
     } catch {
       codesBox.select();
-      notify("Выделено — нажмите Ctrl+C");
+      notify("Выделено - нажмите Ctrl+C");
     }
   }
 
@@ -238,18 +238,17 @@ export function mountAdmin(root) {
             "tr",
             {},
             el("td", { text: `ENT-••••-••••-${invite.codeHint}` }),
-            el("td", {}, el("span", { class: `badge ${invite.status === "active" ? "ok" : ""}`, text: STATUS_LABEL[invite.status] ?? invite.status })),
+            el("td", {}, el("span", { class: "badge", text: STATUS_LABEL[invite.status] ?? invite.status })),
             el("td", { text: invite.monthlyBudgetUsd === null ? "без лимита" : fmtUsd(invite.monthlyBudgetUsd) }),
             el("td", { text: invite.windowLimitUsd === null ? "без лимита" : fmtUsd(invite.windowLimitUsd) }),
             el("td", { text: fmtDateTime(invite.expiresAt) }),
-            el("td", { text: invite.usedByEmail ?? "—" }),
+            el("td", { text: invite.usedByEmail ?? "-" }),
             el(
               "td",
               {},
               invite.status === "active"
                 ? el("button", {
                     type: "button",
-                    class: "danger",
                     text: "Отозвать",
                     onclick: guard(async () => {
                       await api("DELETE", `/api/admin/invites/${invite.id}`);
@@ -321,14 +320,14 @@ export function mountAdmin(root) {
       "section",
       {},
       el("h2", { text: "Создать пользователя" }),
-      el("p", { class: "muted", text: "Пустое поле лимита — значение по умолчанию для роли. Безлимитным пользователя можно сделать в таблице выше, очистив поле." }),
+      el("p", { class: "muted", text: "Пустое поле лимита - значение по умолчанию для роли. Безлимитным пользователя можно сделать в таблице выше, очистив поле." }),
       createUserForm,
     ),
     el(
       "section",
       {},
       el("h2", { text: "Приглашения для публичного приложения ENTINEQ" }),
-      el("p", { class: "muted", text: "Регистрация в публичном приложении — только по коду. Код одноразовый, лимиты берутся из приглашения." }),
+      el("p", { class: "muted", text: "Регистрация в публичном приложении - только по коду. Код одноразовый, лимиты берутся из приглашения." }),
       createInviteForm,
       codesWrap,
       invitesBox,

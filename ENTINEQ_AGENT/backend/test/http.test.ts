@@ -18,7 +18,7 @@ describe("служебные маршруты и заголовки", () => {
     expect((await get("/readyz")).json()).toEqual({ ok: true });
   });
 
-  it("это чистый API: корень — служебный JSON, страниц нет; заголовки безопасности на месте", async () => {
+  it("это чистый API: корень - служебный JSON, страниц нет; заголовки безопасности на месте", async () => {
     const response = await get("/");
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ service: "entineq-agent-backend", ok: true });
@@ -29,7 +29,7 @@ describe("служебные маршруты и заголовки", () => {
     for (const page of ["/index.html", "/js/main.js", "/styles.css"]) expect((await get(page)).statusCode).toBe(404);
   });
 
-  it("неизвестные адреса — одинаковый JSON", async () => {
+  it("неизвестные адреса - одинаковый JSON", async () => {
     for (const url of ["/api/нет-такого", "/нет-такой-страницы", "/.env", "/internal/нет-такого"]) {
       const response = await get(url, internalHeaders());
       expect(response.statusCode).toBe(404);
@@ -45,7 +45,7 @@ describe("служебные маршруты и заголовки", () => {
       expect((await login({ origin: "https://agent-frontend.example.com" })).statusCode).toBe(200);
       const wrong = await login({ origin: "https://evil.example.com" });
       expect([wrong.statusCode, wrong.json().error.code]).toEqual([403, "forbidden"]);
-      // Адрес самого бэкенда в списке не значится — запрос с него не пройдёт.
+      // Адрес самого бэкенда в списке не значится - запрос с него не пройдёт.
       expect((await login({ origin: "http://agent-backend.internal:8080" })).statusCode).toBe(403);
     } finally {
       await own.close();
@@ -129,7 +129,7 @@ describe("вход в собственный интерфейс", () => {
 });
 
 describe("защита от запросов с чужих сайтов (CSRF)", () => {
-  it("запрос, меняющий состояние, с чужим Origin отклоняется, со своим — проходит", async () => {
+  it("запрос, меняющий состояние, с чужим Origin отклоняется, со своим - проходит", async () => {
     const token = await ownerCookie(h);
     const evil = await post("/api/auth/logout", {}, { ...asCookie(token), origin: "https://evil.example", host: "agent.example" });
     expect(evil.statusCode).toBe(403);
@@ -207,7 +207,7 @@ describe("администрирование", () => {
     expect((await post("/api/auth/login", { email: user.email, password: "fresh-password-123" })).json().error.code).toBe("account_disabled");
   });
 
-  it("владельца отключить нельзя; неизвестный id и пустое изменение — ошибки", async () => {
+  it("владельца отключить нельзя; неизвестный id и пустое изменение - ошибки", async () => {
     const owner = asCookie(await ownerCookie(h));
     const users = (await get("/api/admin/users", owner)).json().users as { id: string; role: string }[];
     const ownerId = users.find((u) => u.role === "owner")!.id;
@@ -252,7 +252,7 @@ describe("администрирование", () => {
 });
 
 describe("внутренняя дверь для публичного приложения", () => {
-  it("без секрета и с неверным секретом — отказ, одинаковый для всех маршрутов", async () => {
+  it("без секрета и с неверным секретом - отказ, одинаковый для всех маршрутов", async () => {
     for (const [method, url] of [["GET", "/internal/me"], ["POST", "/internal/auth/login"], ["POST", "/internal/auth/register"], ["GET", "/internal/conversations"]] as const) {
       const none = await h.app.inject({ method, url, payload: method === "POST" ? {} : undefined });
       const wrong = await h.app.inject({ method, url, headers: { authorization: "Bearer wrong" }, payload: method === "POST" ? {} : undefined });
@@ -274,7 +274,7 @@ describe("внутренняя дверь для публичного прило
     expect((await get(`/internal/me?key=${SECRET}`)).statusCode).toBe(401);
   });
 
-  it("с секретом, но без токена пользователя — 401", async () => {
+  it("с секретом, но без токена пользователя - 401", async () => {
     expect((await get("/internal/me", internalHeaders())).statusCode).toBe(401);
     expect((await get("/internal/me", internalHeaders("forged-token"))).statusCode).toBe(401);
   });
@@ -338,7 +338,7 @@ describe("внутренняя дверь для публичного прило
 });
 
 describe("ограничение частоты входов", () => {
-  it("после 10 попыток в минуту — 429, и это не ломает общий формат ошибок", async () => {
+  it("после 10 попыток в минуту - 429, и это не ломает общий формат ошибок", async () => {
     const own = await createHarness({ RATE_LIMIT_LOGIN_PER_MIN: "10", RATE_LIMIT_WS_PER_MIN: "3" });
     try {
       const attempt = () => own.app.inject({ method: "POST", url: "/api/auth/login", payload: { email: "nobody@example.com", password: "неверный-пароль" } });

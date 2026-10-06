@@ -6,7 +6,7 @@ import { testConfig } from "./helpers.js";
 
 const cfg = testConfig();
 
-describe("policyFor — права определяет «дверь», а не заявление клиента", () => {
+describe("policyFor - права определяет «дверь», а не заявление клиента", () => {
   const actor = (role: Actor["role"], entry: Actor["entry"]): Actor => ({ userId: "11111111-1111-4111-8111-111111111111", email: "a@b.co", role, entry });
 
   it("публичный: никаких инструментов, никаких разрешений", () => {
@@ -48,7 +48,7 @@ describe("policyFor — права определяет «дверь», а не 
   });
 });
 
-describe("buildAgentEnv — секреты ядра не попадают в окружение агента", () => {
+describe("buildAgentEnv - секреты ядра не попадают в окружение агента", () => {
   it("вырезает секреты, оставляет нужное и добавляет ключ явно", () => {
     const env = buildAgentEnv(
       {
@@ -92,7 +92,7 @@ describe("summarizeTool", () => {
   });
 });
 
-describe("mapSdkMessage — перевод сообщений SDK в события ENTINEQ", () => {
+describe("mapSdkMessage - перевод сообщений SDK в события ENTINEQ", () => {
   const run = (messages: unknown[]) => {
     const state: MapState = {};
     return messages.flatMap((message) => mapSdkMessage(message, state));

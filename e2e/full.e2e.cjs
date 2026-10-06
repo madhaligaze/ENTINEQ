@@ -1,6 +1,7 @@
 /*
- * Сквозной тест всей связки: настоящее ядро ENTINEQ_AGENT (на настоящем Postgres) + настоящий публичный
- * сервер ENTINEQ + настоящий браузер. Вместо Claude — заглушка (AGENT_RUNNER=fake), поэтому расходов нет.
+ * Сквозной тест связки сервисов, как она будет в Railway: бэкенд ENTINEQ_AGENT (на настоящем Postgres) →
+ * бэкенд публичного приложения ENTINEQ → его фронтенд, и настоящий браузер, который открывает только фронтенд.
+ * Вместо Claude - заглушка (AGENT_RUNNER=fake), поэтому расходов нет.
  */
 const fs = require("node:fs");
 const os = require("node:os");
@@ -9,10 +10,12 @@ const { chromium } = require("playwright");
 const { check, recreateDb, shot, sleep, start, stop, stopAll, summary, watchPage } = require("./lib.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
-const CORE_PORT = 18080;
-const PUB_PORT = 18081;
-const CORE = `http://127.0.0.1:${CORE_PORT}`;
-const PUB = `http://127.0.0.1:${PUB_PORT}`;
+const AGENT_BACK_PORT = 18080;
+const PUB_BACK_PORT = 18081;
+const PUB_FRONT_PORT = 18083;
+const CORE = `http://127.0.0.1:${AGENT_BACK_PORT}`; // бэкенд ENTINEQ_AGENT (прямые вызовы владельца)
+const PUB_API = `http://127.0.0.1:${PUB_BACK_PORT}`; // бэкенд ENTINEQ (прямые проверки)
+const PUB = `http://127.0.0.1:${PUB_FRONT_PORT}`; // фронтенд ENTINEQ - то, что открывает браузер
 const SECRET = "e2e-internal-secret-0123456789abcdef0123456789";
 const OWNER = { email: "owner@e2e.test", password: "owner-password-123" };
 const problems = [];
@@ -21,17 +24,16 @@ const leaks = []; // всё, что получила страница: тела 
 function coreEnv(databaseUrl, dataDir) {
   return {
     NODE_ENV: "production",
-    PORT: String(CORE_PORT),
+    PORT: String(AGENT_BACK_PORT),
     DATABASE_URL: databaseUrl,
     INTERNAL_API_SECRET: SECRET,
     AGENT_RUNNER: "fake",
     OWNER_EMAIL: OWNER.email,
     OWNER_PASSWORD: OWNER.password,
+    ALLOWED_ORIGINS: "http://127.0.0.1:18082", // адрес фронтенда ENTINEQ_AGENT (в этом сценарии не поднимается)
     COOKIE_SECURE: "false",
     DATA_DIR: dataDir,
     LOG_LEVEL: "warn",
-    RATE_LIMIT_LOGIN_PER_MIN: "1000",
-    RATE_LIMIT_WS_PER_MIN: "1000",
   };
 }
 
@@ -72,17 +74,32 @@ function trackLeaks(page) {
   const dataDir = path.join(os.tmpdir(), "entineq-e2e-full-data");
   fs.rmSync(dataDir, { recursive: true, force: true });
 
-  let coreProc = (await start("core", path.join(ROOT, "ENTINEQ_AGENT"), ["dist/server.js"], coreEnv(databaseUrl, dataDir), `${CORE}/healthz`)).child;
+  const startCore = () => start("agent-backend", path.join(ROOT, "ENTINEQ_AGENT", "backend"), ["dist/server.js"], coreEnv(databaseUrl, dataDir), `${CORE}/healthz`);
+  let coreProc = (await startCore()).child;
   await start(
-    "public",
-    path.join(ROOT, "ENTINEQ"),
+    "public-backend",
+    path.join(ROOT, "ENTINEQ", "backend"),
     ["dist/server.js"],
     {
       NODE_ENV: "production",
-      PORT: String(PUB_PORT),
+      PORT: String(PUB_BACK_PORT),
       AGENT_BASE_URL: CORE,
       INTERNAL_API_SECRET: SECRET,
+      ALLOWED_ORIGINS: PUB,
       COOKIE_SECURE: "false",
+      LOG_LEVEL: "warn",
+    },
+    `${PUB_API}/healthz`,
+  );
+  await start(
+    "public-frontend",
+    path.join(ROOT, "ENTINEQ", "frontend"),
+    ["dist/server.js"],
+    {
+      NODE_ENV: "production",
+      PORT: String(PUB_FRONT_PORT),
+      BACKEND_URL: PUB_API,
+      TRUST_PROXY_HOPS: "0",
       LOG_LEVEL: "warn",
       RATE_LIMIT_AUTH_PER_MIN: "1000",
       RATE_LIMIT_WS_PER_MIN: "1000",
@@ -99,12 +116,19 @@ function trackLeaks(page) {
   const browser = await chromium.launch();
   try {
     /* ---------- 0. связка ---------- */
-    console.log("\n[0] Связка двух приложений");
-    const ready = await http(PUB, "GET", "/readyz");
-    check("публичное приложение видит ядро (/readyz)", ready.status === 200 && ready.json.ok === true, ready.text);
+    console.log("\n[0] Связка сервисов");
+    const ready = await http(PUB_API, "GET", "/readyz");
+    check("бэкенд публичного приложения видит ядро (/readyz)", ready.status === 200 && ready.json.ok === true, ready.text);
+    const readyFront = await http(PUB, "GET", "/readyz");
+    check("фронтенд видит свой бэкенд (/readyz)", readyFront.status === 200 && readyFront.json.ok === true, readyFront.text);
     check("внутренний API ядра не проброшен через публичный адрес", (await http(PUB, "GET", "/internal/me")).status === 404);
     check("админский API ядра не проброшен через публичный адрес", (await http(PUB, "GET", "/api/admin/users")).status === 404);
     check("внутренняя дверь ядра закрыта без секрета", (await http(CORE, "GET", "/internal/me")).status === 401);
+    const body = { email: "nobody@e2e.test", password: "password-12345" };
+    const evil = await http(PUB_API, "POST", "/api/auth/login", { body, headers: { origin: "https://evil.example" } });
+    check("бэкенд отклоняет запрос с чужого сайта (Origin)", evil.status === 403, evil.text);
+    const good = await http(PUB_API, "POST", "/api/auth/login", { body, headers: { origin: PUB } });
+    check("и принимает запрос с адреса своего фронтенда", good.status === 401 && good.json.error.code === "invalid_credentials", good.text);
 
     /* ---------- 1. регистрация ---------- */
     console.log("\n[1] Регистрация по приглашению");
@@ -307,18 +331,19 @@ function trackLeaks(page) {
     await sleep(6000);
     check("во время простоя чат не засоряется одинаковыми ошибками", (await carol.locator(".bubble.system").count()) === bubblesDuringOutage, `было ${bubblesDuringOutage}, стало ${await carol.locator(".bubble.system").count()}`);
     check("сам публичный сервер остаётся живым", (await http(PUB, "GET", "/healthz")).status === 200);
-    const readyDuring = await http(PUB, "GET", "/readyz");
-    check("/readyz честно сообщает, что ядра нет", readyDuring.status === 503 && readyDuring.json.reason === "upstream_unavailable", readyDuring.text);
+    const readyDuring = await http(PUB_API, "GET", "/readyz");
+    check("/readyz бэкенда честно сообщает, что ядра нет", readyDuring.status === 503 && readyDuring.json.reason === "upstream_unavailable", readyDuring.text);
+    check("фронтенд и бэкенд публичного приложения при этом живы", (await http(PUB, "GET", "/readyz")).status === 200 && (await http(PUB_API, "GET", "/healthz")).status === 200);
     await shot(carol, "pub-05-outage");
 
-    coreProc = (await start("core", path.join(ROOT, "ENTINEQ_AGENT"), ["dist/server.js"], coreEnv(databaseUrl, dataDir), `${CORE}/healthz`)).child;
+    coreProc = (await startCore()).child;
     await carol.waitForFunction(() => document.getElementById("status").textContent === "готов" && !document.getElementById("send").disabled, null, { timeout: 40000 });
     check("после возвращения ядра интерфейс сам переподключился", true);
     await carol.fill("#input", "я снова на связи");
     await carol.click("#send");
     await carol.waitForFunction(() => [...document.querySelectorAll(".bubble.assistant")].some((b) => b.textContent === "Эхо: я снова на связи"), null, { timeout: 15000 });
     check("после восстановления чат работает, сессия сохранилась", true);
-    check("/readyz снова зелёный", (await http(PUB, "GET", "/readyz")).status === 200);
+    check("/readyz бэкенда снова зелёный", (await http(PUB_API, "GET", "/readyz")).status === 200);
     await ctxC.close();
 
     /* ---------- 8. утечки ---------- */
@@ -342,7 +367,7 @@ function trackLeaks(page) {
     await phone.waitForSelector("#app-view:not([hidden])");
     await phone.waitForFunction(() => document.getElementById("status").textContent === "готов");
     check("нет горизонтальной прокрутки на телефоне", await phone.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
-    check("светлая тема применяется", (await phone.evaluate(() => getComputedStyle(document.body).backgroundColor)) === "rgb(246, 247, 249)");
+    check("светлая тема применяется", (await phone.evaluate(() => getComputedStyle(document.body).backgroundColor)) === "rgb(245, 245, 243)");
     await phone.click("#sidebar-toggle");
     await sleep(350);
     await shot(phone, "pub-06-phone-light");

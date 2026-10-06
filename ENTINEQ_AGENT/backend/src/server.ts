@@ -36,14 +36,14 @@ const runner =
 
 const { app, auth, chat } = await buildApp({ cfg, db: handle.db, runner, hasher: new PasswordHasher() });
 
-if (!cfg.databaseUrl) app.log.warn("DATABASE_URL не задан — используется локальная встроенная БД (только для разработки).");
-if (cfg.agentRunner === "fake") app.log.warn("AGENT_RUNNER=fake — вместо Claude отвечает заглушка. Для настоящей работы уберите эту переменную.");
+if (!cfg.databaseUrl) app.log.warn("DATABASE_URL не задан - используется локальная встроенная БД (только для разработки).");
+if (cfg.agentRunner === "fake") app.log.warn("AGENT_RUNNER=fake - вместо Claude отвечает заглушка. Для настоящей работы уберите эту переменную.");
 
 if (cfg.ownerEmail && cfg.ownerPassword) {
   const created = await auth.bootstrapOwner(cfg.ownerEmail, cfg.ownerPassword);
   app.log.info(created ? `Создан владелец ${cfg.ownerEmail}.` : "Владелец уже существует (OWNER_PASSWORD можно удалить из переменных).");
 } else {
-  app.log.warn("OWNER_EMAIL/OWNER_PASSWORD не заданы — первый вход невозможен, пока владельца нет.");
+  app.log.warn("OWNER_EMAIL/OWNER_PASSWORD не заданы - первый вход невозможен, пока владельца нет.");
 }
 
 const purgeTimer = setInterval(() => {

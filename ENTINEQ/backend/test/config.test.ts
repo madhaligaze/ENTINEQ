@@ -21,7 +21,7 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...base, AGENT_BASE_URL: "http://localhost:8080" }).agentWsUrl).toBe("ws://localhost:8080/internal/ws");
   });
 
-  it("адрес с путём отвергается с подсказкой (частая ошибка — вставить …/internal/ws)", () => {
+  it("адрес с путём отвергается с подсказкой (частая ошибка - вставить …/internal/ws)", () => {
     expect(() => loadConfig({ ...base, AGENT_BASE_URL: "wss://x.example.com/internal/ws" })).toThrow(/без пути/);
   });
 
@@ -31,10 +31,10 @@ describe("loadConfig", () => {
     }
   });
 
-  it("в production обязателен ALLOWED_ORIGINS — адрес фронтенда", () => {
+  it("в production обязателен ALLOWED_ORIGINS - адрес фронтенда", () => {
     expect(() => loadConfig({ ...base, NODE_ENV: "production" })).toThrow(/ALLOWED_ORIGINS обязателен/);
     expect(() => loadConfig({ ...base, NODE_ENV: "production", ALLOWED_ORIGINS: "https://entineq-frontend.example.com" })).not.toThrow();
-    expect(() => loadConfig(base)).not.toThrow(); // вне production — по Host, для удобства разработки
+    expect(() => loadConfig(base)).not.toThrow(); // вне production - по Host, для удобства разработки
   });
 
   it("запасные лимиты бэкенда мягче, чем на фронтенде; адрес для прослушивания можно задать", () => {

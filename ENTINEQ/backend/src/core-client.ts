@@ -51,7 +51,7 @@ export class CoreClient {
     if (!response.ok) {
       const failure = coreErrorSchema.safeParse(payload);
       if (failure.success && failure.data.error.code === "internal_unauthorized") {
-        // Ядро не приняло наш секрет — это ошибка настройки, а не «пользователь не вошёл».
+        // Ядро не приняло наш секрет - это ошибка настройки, а не «пользователь не вошёл».
         this.log.error({ path }, "ядро отклонило INTERNAL_API_SECRET: секреты в двух проектах Railway не совпадают");
         throw errors.misconfigured();
       }

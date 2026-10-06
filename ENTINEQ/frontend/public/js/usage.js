@@ -24,12 +24,15 @@ export function createUsagePanel({ onTick, onExpire }) {
 
     if (w.limitUsd === null) {
       barEl.hidden = true;
+      windowLine.classList.remove("strong");
       windowLine.textContent = `В этом окне: ${fmtUsd(w.spentUsd)} · без лимита`;
     } else {
       barEl.hidden = false;
       const ratio = w.limitUsd > 0 ? Math.min(1, w.spentUsd / w.limitUsd) : 1;
       fillEl.style.width = `${Math.round(ratio * 100)}%`;
-      fillEl.className = `bar-fill${ratio >= 1 ? " danger" : ratio >= 0.8 ? " warn" : ""}`;
+      // Цвет только для отказа: полоса красная, когда лимит исчерпан. Приближение к лимиту (80 процентов и больше) - весом строки.
+      fillEl.className = `bar-fill${ratio >= 1 ? " danger" : ""}`;
+      windowLine.classList.toggle("strong", ratio >= 0.8);
       windowLine.textContent = `${fmtUsd(w.spentUsd)} из ${fmtUsd(w.limitUsd)}`;
     }
 

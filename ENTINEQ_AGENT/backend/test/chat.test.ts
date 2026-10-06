@@ -119,7 +119,7 @@ describe("диалог через прямую дверь (владелец и �
 });
 
 describe("права по уровню доверия", () => {
-  it("доверенный получает терминал, публичный — только чат", async () => {
+  it("доверенный получает терминал, публичный - только чат", async () => {
     const trusted = await makeTrusted(h);
     const pub = await makePublic(h);
     const a = await directSocket(h, trusted.cookie);
@@ -155,14 +155,14 @@ describe("проверка личности на WebSocket", () => {
     expect(await (await directSocket(h, pub.token)).closed).toBe(4401);
   });
 
-  it("внутренняя дверь: без секрета, с неверным секретом и с секретом в адресе — 401", async () => {
+  it("внутренняя дверь: без секрета, с неверным секретом и с секретом в адресе - 401", async () => {
     const pub = await makePublic(h);
     await expect(openSocket(`${h.wsUrl}/internal/ws`, { "x-user-token": pub.token })).rejects.toThrow("HTTP 401");
     await expect(internalSocket(h, pub.token, "wrong-secret")).rejects.toThrow("HTTP 401");
     await expect(openSocket(`${h.wsUrl}/internal/ws?key=${SECRET}`, { "x-user-token": pub.token })).rejects.toThrow("HTTP 401");
   });
 
-  it("внутренняя дверь: секрет верный, но токена нет или он чужой двери — 4401", async () => {
+  it("внутренняя дверь: секрет верный, но токена нет или он чужой двери - 4401", async () => {
     const owner = await ownerCookie(h);
     expect(await (await openSocket(`${h.wsUrl}/internal/ws`, internalHeaders())).closed).toBe(4401);
     expect(await (await internalSocket(h, owner)).closed).toBe(4401);
@@ -354,7 +354,7 @@ describe("лимит окна сессии (как 5-часовое окно у 
 });
 
 describe("ошибки агента", () => {
-  it("доверенный видит причину без секретов, публичный — только общий текст", async () => {
+  it("доверенный видит причину без секретов, публичный - только общий текст", async () => {
     const trusted = await makeTrusted(h);
     const pub = await makePublic(h);
     const a = await directSocket(h, trusted.cookie);
@@ -419,7 +419,7 @@ describe("конкурентность", () => {
     await sleep(200);
     socket.ws.send(JSON.stringify({ type: "user", text: "поспешное" }));
     for (let i = 0; i < 100 && !socket.events.some((e) => e.kind === "done"); i++) await sleep(50);
-    // done один — от настоящего хода; отказ «busy» его не посылает, иначе интерфейс счёл бы ход законченным.
+    // done один - от настоящего хода; отказ «busy» его не посылает, иначе интерфейс счёл бы ход законченным.
     const busyAt = socket.events.findIndex((e) => e.kind === "error" && e.code === "busy");
     const doneAt = socket.events.findIndex((e) => e.kind === "done");
     expect(busyAt).toBeGreaterThanOrEqual(0);

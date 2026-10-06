@@ -40,7 +40,7 @@ describe("loadConfig", () => {
   });
 });
 
-describe("listen — запасной адрес для систем без IPv6", () => {
+describe("listen - запасной адрес для систем без IPv6", () => {
   const fakeApp = (behaviour: (host: string) => Error | undefined) => {
     const attempts: string[] = [];
     const app = {
@@ -54,19 +54,19 @@ describe("listen — запасной адрес для систем без IPv6
   };
   const errno = (code: string) => Object.assign(new Error(code), { code });
 
-  it("сначала `::`, при отсутствии IPv6 — `0.0.0.0`", async () => {
+  it("сначала `::`, при отсутствии IPv6 - `0.0.0.0`", async () => {
     const { app, attempts } = fakeApp((host) => (host === "::" ? errno("EAFNOSUPPORT") : undefined));
     expect(await listen(app, 8080)).toBe("0.0.0.0");
     expect(attempts).toEqual(["::", "0.0.0.0"]);
   });
 
-  it("если `::` доступен — другие адреса не пробуются", async () => {
+  it("если `::` доступен - другие адреса не пробуются", async () => {
     const { app, attempts } = fakeApp(() => undefined);
     expect(await listen(app, 8080)).toBe("::");
     expect(attempts).toEqual(["::"]);
   });
 
-  it("занятый порт — настоящая ошибка, запасной адрес её не маскирует", async () => {
+  it("занятый порт - настоящая ошибка, запасной адрес её не маскирует", async () => {
     const { app, attempts } = fakeApp(() => errno("EADDRINUSE"));
     await expect(listen(app, 8080)).rejects.toMatchObject({ code: "EADDRINUSE" });
     expect(attempts).toEqual(["::"]);

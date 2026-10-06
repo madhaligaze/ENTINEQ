@@ -3,8 +3,8 @@ export type Role = "owner" | "trusted" | "public";
 
 /**
  * Через какую «дверь» пришёл запрос.
- * direct   — собственный интерфейс ENTINEQ_AGENT (владелец и доверенные);
- * internal — внутренний канал для публичного приложения ENTINEQ.
+ * direct   - собственный интерфейс ENTINEQ_AGENT (владелец и доверенные);
+ * internal - внутренний канал для публичного приложения ENTINEQ.
  */
 export type Entry = "direct" | "internal";
 

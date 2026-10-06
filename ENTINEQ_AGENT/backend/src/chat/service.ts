@@ -58,7 +58,7 @@ export class ChatService {
     return this.deps.now?.() ?? new Date();
   }
 
-  /** Выполняет один ход диалога. Завершается даже если сокет клиента уже закрыт — расходы всё равно учитываются. */
+  /** Выполняет один ход диалога. Завершается даже если сокет клиента уже закрыт - расходы всё равно учитываются. */
   runTurn(actor: Actor, input: TurnInput, emit: (event: ServerEvent) => void): Promise<void> {
     const run = this.execute(actor, input, emit);
     const tracked = run.then(
@@ -79,7 +79,7 @@ export class ChatService {
   }
 
   private async execute(actor: Actor, input: TurnInput, emit: (event: ServerEvent) => void): Promise<void> {
-    // Обе проверки синхронные и идут до первого await — между ними никто не успеет вклиниться.
+    // Обе проверки синхронные и идут до первого await - между ними никто не успеет вклиниться.
     if (this.busyUsers.has(actor.userId)) {
       throw new AppError("busy", "Предыдущий запрос ещё выполняется. Дождитесь ответа.", 409);
     }
@@ -103,7 +103,7 @@ export class ChatService {
     const [user] = await db.select().from(users).where(eq(users.id, actor.userId)).limit(1);
     if (!user || !user.isActive) throw errors.unauthorized();
 
-    // 1. Лимиты: если исчерпаны — не запускаем агента и не открываем окно.
+    // 1. Лимиты: если исчерпаны - не запускаем агента и не открываем окно.
     const now = this.now();
     const block = blockReason(await getLimitStatus(db, user, windowHours, now), now);
     if (block) {
@@ -191,7 +191,7 @@ export class ChatService {
                 at: this.now(),
                 callTokens: event.callTokens,
               });
-              // «restart» — SDK начал итоги заново (в транскрипте не было сохранённых): учтено целиком, но стоит знать об этом.
+              // «restart» - SDK начал итоги заново (в транскрипте не было сохранённых): учтено целиком, но стоит знать об этом.
               if (recorded.mode === "restart") log.warn({ userId: user.id, conversationId: conversation.id }, "итоги SDK начались заново: расход хода учтён целиком");
               if (recorded.mode === "ignored") log.warn({ userId: user.id, subtype: event.subtype }, "SDK вернул нулевые итоги: расход хода не учтён");
             }

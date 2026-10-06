@@ -66,7 +66,7 @@ export async function startFakeCore(): Promise<FakeCore> {
   };
 
   app.get("/internal/ping", async (_req, reply) => {
-    // «Старое ядро» ещё не знает маршрута /ping — отвечает так же, как неизвестный адрес.
+    // «Старое ядро» ещё не знает маршрута /ping - отвечает так же, как неизвестный адрес.
     if (state.mode === "old-core") return reply.code(404).send({ error: { code: "not_found", message: "Не найдено." } });
     return state.mode === "bad-contract" ? { nope: true } : { ok: true, service: "entineq-agent", contract: state.mode === "wrong-version" ? 99 : 1 };
   });

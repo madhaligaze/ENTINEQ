@@ -3,7 +3,7 @@ import type { AgentPolicy } from "./policy.js";
 
 export interface AgentTurnInput {
   prompt: string;
-  /** Идентификатор сессии SDK из прошлых ходов диалога — по нему продолжается контекст. */
+  /** Идентификатор сессии SDK из прошлых ходов диалога - по нему продолжается контекст. */
   sdkSessionId?: string;
   policy: AgentPolicy;
   /** Потолок стоимости одного хода, USD. */

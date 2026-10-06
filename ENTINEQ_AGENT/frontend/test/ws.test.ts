@@ -15,7 +15,7 @@ beforeEach(() => {
 const lastRecord = () => h.backend.ws.at(-1)!;
 
 describe("прокладка WebSocket", () => {
-  it("кадры идут в обе стороны; бэкенд получает cookie и Origin, а IP и сайт — заголовками X-Forwarded-*", async () => {
+  it("кадры идут в обе стороны; бэкенд получает cookie и Origin, а IP и сайт - заголовками X-Forwarded-*", async () => {
     const socket = await openSocket(`${h.wsUrl}/ws`, { cookie: "entineq_session=tok", origin: "https://front.example", "user-agent": "ws-test" });
     socket.ws.send("привет");
     expect(await socket.next()).toBe("эхо:привет");
@@ -82,7 +82,7 @@ describe("прокладка WebSocket", () => {
     }
   });
 
-  it("слишком много сообщений, пока бэкенд не ответил, — соединение закрывается (защита памяти)", async () => {
+  it("слишком много сообщений, пока бэкенд не ответил, - соединение закрывается (защита памяти)", async () => {
     h.backend.delayMs = 800;
     const ws = new WebSocket(`${h.wsUrl}/ws`);
     const closed = new Promise<number>((resolve) => ws.on("close", (code) => resolve(code)));

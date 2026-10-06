@@ -31,7 +31,7 @@ export function testConfig(overrides: Record<string, string> = {}): Config {
 }
 
 /**
- * Настоящий Postgres (если задан TEST_DATABASE_URL — для каждого теста своя временная БД) либо встроенный PGlite.
+ * Настоящий Postgres (если задан TEST_DATABASE_URL - для каждого теста своя временная БД) либо встроенный PGlite.
  * Один и тот же набор тестов проходит на обоих.
  */
 async function openTestDb(): Promise<{ handle: DbHandle; cleanup: () => Promise<void> }> {

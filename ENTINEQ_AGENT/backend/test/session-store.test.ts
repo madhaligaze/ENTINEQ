@@ -69,7 +69,7 @@ describe("PgSessionStore (хранилище транскриптов Agent SDK)
     }
   });
 
-  it("delete основной сессии убирает и её субагентов; delete субагента — только его", async () => {
+  it("delete основной сессии убирает и её субагентов; delete субагента - только его", async () => {
     const s = store();
     await s.append(key("del"), [{ type: "user", uuid: "d1" }]);
     await s.append(key("del", "subagents/a"), [{ type: "user", uuid: "d2" }]);

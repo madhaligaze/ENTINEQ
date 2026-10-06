@@ -13,13 +13,13 @@ const CLOSE_POLICY = 1008;
 /** Заголовки браузера, которые передаются бэкенду при открытии WebSocket. Всё остальное отбрасывается. */
 const FORWARDED = ["cookie", "origin", "user-agent", "accept-language"] as const;
 
-/** Коды закрытия, которые можно отправить по сети (1005, 1006, 1015 — служебные, их отправлять нельзя). */
+/** Коды закрытия, которые можно отправить по сети (1005, 1006, 1015 - служебные, их отправлять нельзя). */
 const isSendableCloseCode = (code: number) => (code >= 1000 && code <= 1003) || (code >= 1007 && code <= 1011) || (code >= 3000 && code <= 4999);
 
 /**
  * Прокладка WebSocket «браузер ↔ бэкенд»: кадры пересылаются как есть в обе стороны.
  * Бэкенд сам проверяет вход и Origin, поэтому сюда передаются cookie и Origin браузера,
- * а настоящий IP и адрес сайта — заголовками X-Forwarded-*. Коды закрытия (например 4401 — «нужно войти»)
+ * а настоящий IP и адрес сайта - заголовками X-Forwarded-*. Коды закрытия (например 4401 - «нужно войти»)
  * передаются без изменений, служебные заменяются на 1011.
  */
 export function proxyWebSocket(client: WebSocket, req: FastifyRequest, cfg: Pick<Config, "backendWsUrl">, log: Log): void {
@@ -38,7 +38,8 @@ export function proxyWebSocket(client: WebSocket, req: FastifyRequest, cfg: Pick
   let clientAlive = true;
   let upstreamAlive = true;
 
-  const upstream = new WebSocket(`${cfg.backendWsUrl}${req.raw.url ?? "/ws"}`, {
+  // Адрес у бэкенда всегда один: что именно запросил браузер (строка запроса и прочее), до него не доходит.
+  const upstream = new WebSocket(`${cfg.backendWsUrl}/ws`, {
     headers,
     handshakeTimeout: 10_000,
     maxPayload: 4 * 1024 * 1024,

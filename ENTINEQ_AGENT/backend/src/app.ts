@@ -43,7 +43,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     bodyLimit: 100 * 1024,
   });
 
-  // Принимаем только JSON. text/plain — «простой» тип запроса, который браузер шлёт с чужого сайта без предварительной проверки.
+  // Принимаем только JSON. text/plain - «простой» тип запроса, который браузер шлёт с чужого сайта без предварительной проверки.
   app.removeContentTypeParser("text/plain");
 
   app.setErrorHandler((error: unknown, req, reply) => {
@@ -67,7 +67,7 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
     return reply.code(500).send({ error: { code: "internal_error", message: "Внутренняя ошибка сервера." } });
   });
 
-  // Это чистый API: страниц здесь нет, на любой неизвестный адрес — одинаковый JSON.
+  // Это чистый API: страниц здесь нет, на любой неизвестный адрес - одинаковый JSON.
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Не найдено." } }));
 
   await app.register(helmet, {
@@ -87,9 +87,9 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
   const chat = new ChatService({ db, runner: deps.runner, cfg, log: app.log, now: deps.now });
   const ctx: AppContext = { cfg, db, auth, chat };
 
-  /** Корень — просто «жив ли и что за сервис»: пригодится, когда адрес бэкенда открывают в браузере. */
+  /** Корень - просто «жив ли и что за сервис»: пригодится, когда адрес бэкенда открывают в браузере. */
   app.get("/", async () => ({ service: "entineq-agent-backend", ok: true }));
-  // Пробы здоровья дёргаются каждые несколько секунд — их запросы в журнал не пишем.
+  // Пробы здоровья дёргаются каждые несколько секунд - их запросы в журнал не пишем.
   app.get("/healthz", { logLevel: "warn" }, async () => ({ ok: true }));
   app.get("/readyz", { logLevel: "warn" }, async (_req, reply) => {
     try {

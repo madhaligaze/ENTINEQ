@@ -1,19 +1,36 @@
+/*
+ * Правила оформления (CLAUDE.md в корне проекта):
+ * - цвет только для отказа (--danger), никакого «всё хорошо» зелёным и никаких цветных точек у состояний;
+ * - кнопки и поля прямоугольные, без скруглений; главное действие - плита, остальное - волосяная рамка;
+ * - выбранное показывается весом подписи, рамкой или чертой, а не залитой капсулой;
+ * - тема по умолчанию системная (тёмная и светлая).
+ */
 :root {
-  color-scheme: dark;
-  --bg: #0e1013;
-  --panel: #16191e;
-  --panel-2: #1c2128;
-  --line: #262b33;
-  --text: #e6e9ef;
-  --dim: #8b93a1;
-  --accent: #6ea8fe;
-  --accent-text: #06101f;
-  --ok: #5fd08a;
-  --warn: #f2c14e;
+  color-scheme: dark light;
+  --bg: #0d0e10;
+  --panel: #131518;
+  --panel-2: #1a1c20;
+  --line: #2b2e34;
+  --line-strong: #565b65;
+  --text: #e8e9ec;
+  --dim: #9097a3;
   --danger: #ff6b6b;
-  --term: #0a0c0f;
-  --radius: 10px;
+  --term: #090a0c;
   --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f5f3;
+    --panel: #ffffff;
+    --panel-2: #ecece9;
+    --line: #d6d6d1;
+    --line-strong: #8a8a85;
+    --text: #17181a;
+    --dim: #5f636b;
+    --danger: #c62828;
+    --term: #efefec;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -34,26 +51,26 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .spacer { flex: 1; }
 
 button {
-  background: var(--panel-2);
+  background: transparent;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 7px 14px;
   cursor: pointer;
 }
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: 0.5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
-button.ghost { background: transparent; }
-button.danger { color: var(--danger); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:hover:not(:disabled) { border-color: var(--text); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+button.primary:hover:not(:disabled) { opacity: 0.88; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 
 input, textarea, select {
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 0;
   padding: 8px 10px;
   width: 100%;
 }
+input:hover, textarea:hover, select:hover { border-color: var(--line-strong); }
 textarea { resize: none; }
 
 .center { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; }
@@ -61,7 +78,6 @@ textarea { resize: none; }
   width: min(380px, 100%);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
   padding: 26px;
   display: flex;
   flex-direction: column;
@@ -82,9 +98,10 @@ textarea { resize: none; }
   background: var(--panel);
 }
 .brand { letter-spacing: 0.02em; }
-.tabs { display: flex; gap: 4px; }
-.tab { background: transparent; border-color: transparent; }
-.tab.active { background: var(--panel-2); border-color: var(--line); }
+.tabs { display: flex; gap: 14px; }
+.tab { border-width: 0 0 2px; border-style: solid; border-color: transparent; padding: 6px 2px; color: var(--dim); }
+.tab:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text); }
+.tab.active, .tab.active:hover:not(:disabled) { border-color: var(--text); color: var(--text); font-weight: 600; }
 .user-email { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .only-narrow { display: none; }
 
@@ -104,22 +121,25 @@ textarea { resize: none; }
 .conversations button {
   width: 100%;
   text-align: left;
-  background: transparent;
+  border-width: 0 0 0 2px;
+  border-style: solid;
   border-color: transparent;
+  padding: 7px 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.conversations button.active { background: var(--panel-2); border-color: var(--line); }
+.conversations button:hover:not(:disabled) { background: var(--panel-2); border-color: var(--line-strong); }
+.conversations button.active, .conversations button.active:hover:not(:disabled) { border-color: var(--text); font-weight: 600; }
 .conversations .empty { color: var(--dim); padding: 6px 10px; font-size: 13px; }
 
 .usage { border-top: 1px solid var(--line); padding-top: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .usage-title { font-weight: 600; }
-.bar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; border: 1px solid var(--line); }
-.bar-fill { height: 100%; width: 0; background: var(--ok); transition: width 0.3s; }
-.bar-fill.warn { background: var(--warn); }
+.bar { height: 4px; background: transparent; border: 1px solid var(--line); overflow: hidden; }
+.bar-fill { height: 100%; width: 0; background: var(--text); transition: width 0.3s; }
 .bar-fill.danger { background: var(--danger); }
 .usage-line { font-variant-numeric: tabular-nums; }
+.usage-line.strong { font-weight: 600; }
 
 /* ----- чат ----- */
 .chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
@@ -128,17 +148,17 @@ textarea { resize: none; }
 .bubble {
   max-width: min(760px, 92%);
   padding: 9px 13px;
-  border-radius: 12px;
+  border: 1px solid var(--line);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.bubble.user { align-self: flex-end; background: #1d2733; }
-.bubble.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
-.bubble.system { align-self: center; color: var(--dim); font-size: 13px; background: transparent; }
-.bubble.tool { align-self: flex-start; font-family: var(--mono); font-size: 12.5px; color: var(--dim); background: var(--term); border: 1px solid var(--line); }
+.bubble.user { align-self: flex-end; background: var(--panel-2); }
+.bubble.assistant { align-self: flex-start; background: transparent; }
+.bubble.system { align-self: center; border-color: transparent; color: var(--dim); font-size: 13px; background: transparent; }
+.bubble.system.error { color: var(--danger); font-weight: 600; }
+.bubble.tool { align-self: flex-start; font-family: var(--mono); font-size: 12.5px; color: var(--dim); background: var(--term); }
 
-.banner { margin: 0 14px 8px; padding: 9px 12px; border-radius: 8px; background: #2a2013; border: 1px solid #5a4318; color: var(--warn); }
-.banner.error { background: #2a1517; border-color: #5c2328; color: var(--danger); }
+.banner { margin: 0 14px 8px; padding: 9px 12px; border: 1px solid var(--danger); color: var(--danger); background: transparent; }
 .composer { display: flex; gap: 8px; padding: 0 14px 6px; }
 .composer textarea { flex: 1; }
 .status { padding: 2px 16px 10px; font-size: 12px; }
@@ -147,14 +167,13 @@ textarea { resize: none; }
 .terminal-panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .terminal { flex: 1; overflow: auto; padding: 10px 14px; font-family: var(--mono); font-size: 12.5px; }
 .terminal .line { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 4px; }
-.terminal .line.cmd { color: var(--ok); }
 .terminal .line.cmd::before { content: "$ "; color: var(--dim); }
 .terminal .line.meta { color: var(--dim); }
 
 /* ----- админка ----- */
 .admin-screen { overflow: auto; }
 .admin { max-width: 1100px; margin: 0 auto; padding: 20px 16px 60px; display: flex; flex-direction: column; gap: 28px; }
-.admin section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.admin section { background: var(--panel); border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .admin h2 { font-size: 16px; }
 .admin .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .admin .field { display: flex; flex-direction: column; gap: 4px; min-width: 130px; flex: 1; }
@@ -166,11 +185,10 @@ th { color: var(--dim); font-weight: 500; white-space: nowrap; }
 td input { min-width: 84px; padding: 5px 8px; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 tfoot td { font-weight: 600; border-bottom: 0; }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--line); }
-.badge.off { color: var(--danger); }
-.badge.ok { color: var(--ok); }
-.notice { padding: 9px 12px; border-radius: 8px; background: #13261b; border: 1px solid #1f4a30; color: var(--ok); }
-.notice.error { background: #2a1517; border-color: #5c2328; color: var(--danger); }
+.badge { display: inline-block; padding: 1px 8px; font-size: 12px; border: 1px solid var(--line); }
+.badge.off { color: var(--danger); border-color: var(--danger); }
+.notice { padding: 9px 12px; border: 1px solid var(--line-strong); }
+.notice.error { color: var(--danger); border-color: var(--danger); }
 .codes { font-family: var(--mono); min-height: 5.5em; }
 
 /* ----- узкие экраны ----- */
@@ -182,6 +200,6 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   .only-narrow { display: inline-block; }
   .user-email { display: none; }
   .chat-screen { grid-template-columns: minmax(0, 1fr); position: relative; }
-  .sidebar { position: absolute; z-index: 5; inset: 0 auto 0 0; width: min(300px, 86%); transform: translateX(-102%); transition: transform 0.2s; box-shadow: 4px 0 24px #0008; }
+  .sidebar { position: absolute; z-index: 5; inset: 0 auto 0 0; width: min(300px, 86%); transform: translateX(-102%); transition: transform 0.2s; }
   .sidebar.open { transform: none; }
 }

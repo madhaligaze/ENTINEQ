@@ -7,7 +7,7 @@ import { clearSessionCookie, csrfHook, SESSION_COOKIE, setSessionCookie } from "
 
 /**
  * REST для браузера (запросы приходят от фронтенд-сервиса). Всё делает ядро: здесь проверяется ввод, ставится cookie и пересылаются запросы.
- * Токен сессии живёт только в httpOnly-cookie — скрипт на странице его не видит.
+ * Токен сессии живёт только в httpOnly-cookie - скрипт на странице его не видит.
  */
 export async function registerApi(app: FastifyInstance, cfg: Config, core: CoreClient): Promise<void> {
   const tokenOf = (req: FastifyRequest): string => {
@@ -16,7 +16,7 @@ export async function registerApi(app: FastifyInstance, cfg: Config, core: CoreC
     return token;
   };
 
-  /** Выполняет запрос от имени пользователя; если ядро говорит «сессия недействительна» — стираем cookie. */
+  /** Выполняет запрос от имени пользователя; если ядро говорит «сессия недействительна» - стираем cookie. */
   const asUser = async <T>(req: FastifyRequest, reply: FastifyReply, fn: (token: string) => Promise<T>): Promise<T> => {
     try {
       return await fn(tokenOf(req));

@@ -8,7 +8,7 @@ import type { AgentEvent, AgentRunner, AgentTurnInput } from "./types.js";
 const SENSITIVE_ENV = /(SECRET|PASSWORD|PASSWD|TOKEN|DATABASE|PGPASSWORD|PRIVATE|CREDENTIAL)/i;
 
 /**
- * Окружение процесса агента: всё полезное (PATH, HOME…), но без секретов ядра — строки подключения к БД,
+ * Окружение процесса агента: всё полезное (PATH, HOME…), но без секретов ядра - строки подключения к БД,
  * внутреннего секрета, пароля владельца. Ключ Anthropic передаём явно: он нужен самому SDK.
  */
 export function buildAgentEnv(

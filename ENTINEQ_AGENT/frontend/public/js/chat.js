@@ -11,7 +11,7 @@ function parseTool(content) {
 
 /**
  * Чат: WebSocket с переподключением, потоковый ответ, история диалогов.
- * Весь текст попадает на страницу через textContent — вставить разметку или скрипт в ответ невозможно.
+ * Весь текст попадает на страницу через textContent - вставить разметку или скрипт в ответ невозможно.
  */
 export class Chat {
   constructor(options) {
@@ -37,7 +37,7 @@ export class Chat {
       this.#submit();
     });
     this.o.input.addEventListener("keydown", (event) => {
-      // Enter отправляет, Shift+Enter — новая строка; во время ввода через IME Enter не трогаем.
+      // Enter отправляет, Shift+Enter - новая строка; во время ввода через IME Enter не трогаем.
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         this.#submit();
@@ -97,7 +97,7 @@ export class Chat {
       this.connected = true;
       this.openedAt = Date.now();
       // Паузу между попытками здесь не сбрасываем: сервер мог принять соединение и сразу закрыть его
-      // (ядро недоступно) — тогда пауза должна продолжать расти, а не долбить сервер раз в секунду.
+      // (ядро недоступно) - тогда пауза должна продолжать расти, а не долбить сервер раз в секунду.
       this.#setStatus("готов");
       this.#sync();
       if (this.busyWhenClosed) {
@@ -112,7 +112,7 @@ export class Chat {
     ws.addEventListener("close", (event) => {
       if (this.ws !== ws) return;
       this.connected = false;
-      // Соединение прожило достаточно долго — считаем его удачным и начинаем отсчёт пауз заново.
+      // Соединение прожило достаточно долго - считаем его удачным и начинаем отсчёт пауз заново.
       if (this.openedAt && Date.now() - this.openedAt > 5000) this.retries = 0;
       this.openedAt = 0;
       if (this.busy) {
@@ -167,10 +167,11 @@ export class Chat {
         this.o.onUsage(event.usage);
         break;
       case "error":
-        // Ошибка хода остаётся в переписке; ошибки соединения (когда ход не шёл) — только в баннере, без шума в чате.
+        // Ошибка хода остаётся в переписке; ошибки соединения (когда ход не шёл) - только в баннере, без шума в чате.
         if (this.busy) {
           this.#clearHint();
-          this.#bubble("system", `⚠ ${event.message}`);
+          // Отказ показываем цветом и весом (а не значком): сообщение само говорит, что пошло не так.
+          this.#bubble("system error", event.message);
           this.#scroll();
         }
         this.o.onError(event.message);
@@ -304,6 +305,6 @@ export class Chat {
   #sync() {
     const canSend = this.connected && !this.busy && !this.blocked;
     this.o.send.disabled = !canSend;
-    this.o.input.placeholder = this.blocked ? "Лимит исчерпан — дождитесь сброса" : this.o.placeholder;
+    this.o.input.placeholder = this.blocked ? "Лимит исчерпан - дождитесь сброса" : this.o.placeholder;
   }
 }

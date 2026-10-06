@@ -11,10 +11,10 @@ export class ConfigError extends Error {
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
-  /** Адрес, на котором слушать. По умолчанию — все интерфейсы, включая IPv6 (нужно для приватной сети Railway). */
+  /** Адрес, на котором слушать. По умолчанию - все интерфейсы, включая IPv6 (нужно для приватной сети Railway). */
   HOST: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  /** Сколько прокси стоит перед этим сервисом (Railway — один). Нужно, чтобы видеть настоящий IP посетителя. */
+  /** Сколько прокси стоит перед этим сервисом (Railway - один). Нужно, чтобы видеть настоящий IP посетителя. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
 
   /** Адрес бэкенда, на который пересылаются /api и /ws. */
@@ -40,7 +40,7 @@ export interface Config {
 
 /**
  * Хосты, на которых допустим http: между сервисами внутри Railway трафик не выходит в интернет.
- * Имя без точки (например `backend` в docker compose) — всегда внутреннее: в публичном DNS таких имён нет.
+ * Имя без точки (например `backend` в docker compose) - всегда внутреннее: в публичном DNS таких имён нет.
  */
 const isPrivateHost = (host: string) =>
   host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".railway.internal") || !host.includes(".");
@@ -56,7 +56,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
   const problems: string[] = [];
   let backendOrigin = "";
   try {
-    // Допускаем и ws(s):// — на случай, если вставили адрес чата.
+    // Допускаем и ws(s):// - на случай, если вставили адрес чата.
     const url = new URL(e.BACKEND_URL.trim().replace(/^ws(s?):\/\//i, "http$1://"));
     if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("протокол");
     if (url.pathname !== "/" && url.pathname !== "") {
@@ -67,7 +67,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     }
     backendOrigin = url.origin;
   } catch {
-    problems.push(`BACKEND_URL: «${e.BACKEND_URL}» — не адрес (нужно вида https://my-backend.up.railway.app).`);
+    problems.push(`BACKEND_URL: «${e.BACKEND_URL}» - не адрес (нужно вида https://my-backend.up.railway.app).`);
   }
   if (problems.length) throw new ConfigError(problems);
 

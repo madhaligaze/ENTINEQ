@@ -80,7 +80,7 @@ const chat = new Chat({
   newButton: $("new-chat"),
   wsPath: "/ws",
   apiBase: "/api",
-  hint: "Чем помочь? Задайте вопрос — Claude ответит.",
+  hint: "Чем помочь? Задайте вопрос - Claude ответит.",
   placeholder: "Спросите что-нибудь…",
   onUsage: applyUsage,
   onTool: () => {},

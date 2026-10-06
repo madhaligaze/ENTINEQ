@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { call, createHarness, type Harness } from "./helpers.js";
+import { call, createHarness, rawRequest, type Harness } from "./helpers.js";
 
 let h: Harness;
 beforeAll(async () => {
@@ -33,7 +33,7 @@ describe("страницы", () => {
     expect(h.backend.calls).toHaveLength(0); // страницы бэкенд не трогают
   });
 
-  it("неизвестные адреса — 404 текстом; выйти за пределы папки со страницами нельзя", async () => {
+  it("неизвестные адреса - 404 текстом; выйти за пределы папки со страницами нельзя", async () => {
     expect((await call(h, "GET", "/нет-такой")).status).toBe(404);
     for (const path of ["/../package.json", "/..%2fpackage.json", "/js/../../package.json", "/%2e%2e/package.json", "/js/%2e%2e/%2e%2e/package.json"]) {
       const result = await call(h, "GET", path);
@@ -128,6 +128,69 @@ describe("пересылка /api на бэкенд", () => {
   });
 });
 
+describe("выход за пределы /api через точки и кодированные символы в пути", () => {
+  // Адрес браузера вида /api/.. сервер получает как есть, а разбор URL при пересылке «схлопывает» ../ и тем самым
+  // мог бы вывести запрос на другие адреса бэкенда (/internal/*, /healthz). Такие пути отклоняются целиком.
+  const attacks = [
+    "/api/../healthz",
+    "/api/../internal/ping",
+    "/api/%2e%2e/healthz",
+    "/api/%2E%2E/healthz",
+    "/api/.%2e/healthz",
+    "/api/..%2fhealthz",
+    "/api/..%2Fhealthz",
+    "/api/%2e%2e%2fhealthz",
+    "/api/..%5chealthz",
+    "/api/..\\healthz",
+    "/api/auth/../../healthz",
+    "/api/./me/../../healthz",
+    "/api//healthz",
+    "/api/me%00",
+  ];
+
+  it("ни один вариант не доходит до бэкенда", async () => {
+    for (const path of attacks) {
+      h.backend.calls.length = 0;
+      const result = await rawRequest(h, "GET", path);
+      expect([path, result.status >= 400 && result.status < 500]).toEqual([path, true]);
+      expect([path, result.text.includes('"ok":true')]).toEqual([path, false]);
+      expect([path, h.backend.calls.map((c) => c.url)]).toEqual([path, []]);
+    }
+  });
+
+  it("то же для методов, меняющих данные (вход, регистрация, произвольный POST)", async () => {
+    for (const method of ["POST", "PATCH", "DELETE"]) {
+      for (const path of ["/api/../healthz", "/api/%2e%2e/api/auth/login", "/api/auth/../../internal/auth/login"]) {
+        h.backend.calls.length = 0;
+        const result = await rawRequest(h, method, path);
+        expect([method, path, result.status >= 400 && result.status < 500]).toEqual([method, path, true]);
+        expect([method, path, h.backend.calls.map((c) => c.url)]).toEqual([method, path, []]);
+      }
+    }
+  });
+
+  it("обычные пути с параметрами и строкой запроса по-прежнему проходят", async () => {
+    const ok = [
+      "/api/me",
+      "/api/me?month=2026-10",
+      "/api/conversations/00000000-0000-4000-8000-000000000000/messages",
+      "/api/admin/users/00000000-0000-4000-8000-000000000000",
+      "/api/status/404",
+    ];
+    for (const path of ok) {
+      h.backend.calls.length = 0;
+      const result = await rawRequest(h, "GET", path);
+      expect([path, result.status === 502 || result.status === 0]).toEqual([path, false]);
+      expect([path, h.backend.calls.length]).toEqual([path, 1]);
+      expect(h.backend.calls[0]!.url).toBe(path);
+    }
+  });
+
+  it("при этом сервис продолжает работать для обычных запросов", async () => {
+    expect((await call(h, "GET", "/api/me")).status).toBe(200);
+  });
+});
+
 describe("сбои бэкенда", () => {
   it("бэкенд недоступен: 502 с понятным текстом, внутренностей нет; сам сервис живой", async () => {
     const own = await createHarness();
@@ -158,7 +221,7 @@ describe("сбои бэкенда", () => {
     }
   });
 
-  it("/readyz: бэкенд здоров — ok, нездоров — 503 с причиной", async () => {
+  it("/readyz: бэкенд здоров - ok, нездоров - 503 с причиной", async () => {
     expect((await call(h, "GET", "/readyz")).json).toEqual({ ok: true });
     h.backend.mode = "unhealthy";
     const unhealthy = await call(h, "GET", "/readyz");

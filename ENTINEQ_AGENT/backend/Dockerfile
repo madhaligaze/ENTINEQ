@@ -25,7 +25,7 @@ RUN pnpm install --frozen-lockfile --prod
 FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     DATA_DIR=/data
-# git пригодится агенту в терминале (клонирование, diff); ca-certificates — для HTTPS.
+# git пригодится агенту в терминале (клонирование, diff); ca-certificates - для HTTPS.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \
  && rm -rf /var/lib/apt/lists/* \

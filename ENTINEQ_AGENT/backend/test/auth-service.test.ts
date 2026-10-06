@@ -118,7 +118,7 @@ describe("вход", () => {
     return { email, user };
   };
 
-  it("верный пароль — сессия; неверный и неизвестный email дают одинаковую ошибку", async () => {
+  it("верный пароль - сессия; неверный и неизвестный email дают одинаковую ошибку", async () => {
     const { email } = await make();
     const ok = await h.auth.login({ email: email.toUpperCase(), password: "password-12345", entry: "direct" });
     expect(ok.token).toBeTruthy();
@@ -180,7 +180,7 @@ describe("authenticate", () => {
     return { user, token: grant.token, entry } as const;
   };
 
-  it("по токену возвращает личность; мусор и пустое значение — null", async () => {
+  it("по токену возвращает личность; мусор и пустое значение - null", async () => {
     const { token, user, entry } = await session();
     expect(await h.auth.authenticate(token, entry)).toMatchObject({ userId: user.id, role: "trusted", entry: "direct" });
     for (const bad of [undefined, "", "мусор", "x".repeat(500)]) expect(await h.auth.authenticate(bad, "direct")).toBeNull();

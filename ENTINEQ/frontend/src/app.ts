@@ -6,6 +6,7 @@ import fastifyStatic from "@fastify/static";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import type { Config } from "./config.js";
+import { isSuspiciousPath } from "./path.js";
 import { proxyWebSocket } from "./ws-proxy.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
@@ -30,7 +31,7 @@ const FORWARDED_REQUEST_HEADERS = new Set([
 ]);
 
 /**
- * Фронтенд-сервис: отдаёт страницы и пересылает /api и /ws на бэкенд (адрес — BACKEND_URL).
+ * Фронтенд-сервис: отдаёт страницы и пересылает /api и /ws на бэкенд (адрес - BACKEND_URL).
  * Для браузера всё живёт на одном адресе, поэтому cookie, проверка Origin и политика безопасности
  * работают так же, как если бы бэкенд стоял рядом. Наружу бэкенд при этом открывать не нужно.
  */
@@ -45,7 +46,7 @@ export async function buildApp(cfg: Config): Promise<FastifyInstance> {
     bodyLimit: 100 * 1024,
   });
 
-  // Принимаем только JSON. text/plain — «простой» тип запроса, который браузер шлёт с чужого сайта без предварительной проверки.
+  // Принимаем только JSON. text/plain - «простой» тип запроса, который браузер шлёт с чужого сайта без предварительной проверки.
   app.removeContentTypeParser("text/plain");
 
   app.setErrorHandler((error: unknown, req, reply) => {
@@ -107,8 +108,10 @@ export async function buildApp(cfg: Config): Promise<FastifyInstance> {
     }
   });
 
-  const forward = (req: FastifyRequest, reply: FastifyReply) =>
-    reply.from(req.raw.url ?? "/", {
+  const forward = (req: FastifyRequest, reply: FastifyReply) => {
+    const url = req.raw.url ?? "/";
+    if (isSuspiciousPath(url)) return reply.code(404).send({ error: { code: "not_found", message: "Не найдено." } });
+    return reply.from(url, {
       timeout: cfg.backendTimeoutMs,
       rewriteRequestHeaders: (request, headers) => {
         const allowed: Record<string, string | string[] | undefined> = {};
@@ -129,6 +132,7 @@ export async function buildApp(cfg: Config): Promise<FastifyInstance> {
           .send({ error: { code: "upstream_unavailable", message: "Сервис временно недоступен. Попробуйте чуть позже." } });
       },
     });
+  };
 
   // Попытки входа и регистрации ограничиваем здесь, где виден настоящий IP посетителя.
   const authLimit = { rateLimit: { max: cfg.rateLimits.authPerMinute, timeWindow: "1 minute" } };

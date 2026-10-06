@@ -1,3 +1,4 @@
+import http from "node:http";
 import type { AddressInfo } from "node:net";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -27,7 +28,7 @@ export interface FakeBackend {
   ws: WsRecord[];
   /** Задержка перед обработкой любого запроса (в том числе рукопожатия WebSocket). */
   delayMs: number;
-  /** Что делать: ok — всё как обычно; unhealthy — /healthz отвечает 500; ws-reject — рукопожатие WebSocket отклоняется (403). */
+  /** Что делать: ok - всё как обычно; unhealthy - /healthz отвечает 500; ws-reject - рукопожатие WebSocket отклоняется (403). */
   mode: "ok" | "unhealthy" | "ws-reject";
   close(): Promise<void>;
 }
@@ -144,6 +145,20 @@ export async function call(h: Harness, method: string, path: string, options: { 
   return { status: response.status, headers: response.headers, text, json, setCookies: response.headers.getSetCookie() };
 }
 
+/** Запрос с точной строкой пути: fetch сам «исправляет» ../ и %2e, а злоумышленник этого не делает. */
+export function rawRequest(h: Harness, method: string, rawPath: string): Promise<{ status: number; text: string }> {
+  return new Promise((resolve, reject) => {
+    const url = new URL(h.baseUrl);
+    const req = http.request({ host: url.hostname, port: url.port, method, path: rawPath }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
+
 export interface Socket {
   ws: WebSocket;
   messages: { data: string; binary: boolean }[];
@@ -160,7 +175,7 @@ export function openSocket(url: string, headers: Record<string, string> = {}): P
     const closed = new Promise<number>((done) => ws.on("close", (code) => done(code)));
     ws.on("message", (data, isBinary) => {
       const text = isBinary ? "<binary>" : data.toString();
-      // Сообщение достаётся либо ожидающему next(), либо складывается в очередь — но не туда и туда.
+      // Сообщение достаётся либо ожидающему next(), либо складывается в очередь - но не туда и туда.
       const waiter = waiters.shift();
       if (waiter) waiter(text);
       else messages.push({ data: text, binary: isBinary });

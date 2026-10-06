@@ -14,7 +14,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 /**
  * Защита от CSRF и перехвата WebSocket из чужого сайта: Origin должен совпасть с нашим адресом.
- * Без Origin (curl, сервер) пропускаем, но если браузер сам говорит «чужой сайт» — отказываем.
+ * Без Origin (curl, сервер) пропускаем, но если браузер сам говорит «чужой сайт» - отказываем.
  */
 export function isOriginAllowed(req: FastifyRequest, allowedOrigins: string[]): boolean {
   const origin = header(req, "origin");
@@ -32,7 +32,7 @@ export function isOriginAllowed(req: FastifyRequest, allowedOrigins: string[]): 
 
 export function assertSameOrigin(req: FastifyRequest, cfg: Pick<Config, "allowedOrigins">): void {
   if (isOriginAllowed(req, cfg.allowedOrigins)) return;
-  // Для владельца сервиса: самая частая причина — в ALLOWED_ORIGINS не тот адрес фронтенда.
+  // Для владельца сервиса: самая частая причина - в ALLOWED_ORIGINS не тот адрес фронтенда.
   req.log.warn({ origin: header(req, "origin"), allowedOrigins: cfg.allowedOrigins }, "Origin не совпал с ALLOWED_ORIGINS");
   throw errors.forbidden("Запрос с чужого сайта отклонён.");
 }

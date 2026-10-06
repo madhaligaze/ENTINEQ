@@ -24,7 +24,7 @@ fetch(`${cfg.backendOrigin}/healthz`, { signal: AbortSignal.timeout(5000) }).the
   (response) => {
     if (!response.ok) app.log.warn(`Бэкенд ответил ${response.status} на /healthz. Проверьте BACKEND_URL.`);
   },
-  () => app.log.warn(`Бэкенд пока недоступен (${cfg.backendOrigin}). Если он ещё запускается — это нормально; иначе проверьте BACKEND_URL.`),
+  () => app.log.warn(`Бэкенд пока недоступен (${cfg.backendOrigin}). Если он ещё запускается - это нормально; иначе проверьте BACKEND_URL.`),
 );
 
 let closing = false;

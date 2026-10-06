@@ -26,14 +26,14 @@ app.log.info(`Слушаю ${host}:${cfg.port}.`);
 core.ping().then(
   (ping) => {
     if (ping.contract !== EXPECTED_CONTRACT) {
-      app.log.error({ expected: EXPECTED_CONTRACT, actual: ping.contract }, "версии контракта ENTINEQ и ENTINEQ_AGENT не совпадают — обновите оба проекта");
+      app.log.error({ expected: EXPECTED_CONTRACT, actual: ping.contract }, "версии контракта ENTINEQ и ENTINEQ_AGENT не совпадают - обновите оба проекта");
     } else {
       app.log.info(`Связь с ядром установлена (${cfg.agentOrigin}).`);
     }
   },
   (error: unknown) => {
     const reason = error instanceof AppError ? error.code : "unknown";
-    app.log.warn(`Ядро пока недоступно (${cfg.agentOrigin}): ${reason}. Если оно ещё запускается — это нормально; иначе проверьте AGENT_BASE_URL и INTERNAL_API_SECRET.`);
+    app.log.warn(`Ядро пока недоступно (${cfg.agentOrigin}): ${reason}. Если оно ещё запускается - это нормально; иначе проверьте AGENT_BASE_URL и INTERNAL_API_SECRET.`);
   },
 );
 

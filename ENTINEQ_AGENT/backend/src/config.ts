@@ -14,10 +14,10 @@ const flag = z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" |
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
-  /** Адрес, на котором слушать. По умолчанию — все интерфейсы, включая IPv6 (нужно для приватной сети Railway). */
+  /** Адрес, на котором слушать. По умолчанию - все интерфейсы, включая IPv6 (нужно для приватной сети Railway). */
   HOST: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  /** Сколько прокси стоит перед бэкендом (фронтенд-сервис — один). Нужно для определения IP посетителя. */
+  /** Сколько прокси стоит перед бэкендом (фронтенд-сервис - один). Нужно для определения IP посетителя. */
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(1),
 
   DATABASE_URL: z.string().min(1).optional(),
@@ -119,7 +119,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): Config {
     try {
       allowedOrigins.push(new URL(raw).origin);
     } catch {
-      problems.push(`ALLOWED_ORIGINS: «${raw}» — не адрес (нужно вида https://example.com).`);
+      problems.push(`ALLOWED_ORIGINS: «${raw}» - не адрес (нужно вида https://example.com).`);
     }
   }
   if (e.NODE_ENV === "production" && allowedOrigins.length === 0) {

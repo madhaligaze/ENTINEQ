@@ -5,7 +5,7 @@ export function fmtUsd(value) {
   return `$${n !== 0 && Math.abs(n) < 0.01 ? n.toFixed(4) : n.toFixed(2)}`;
 }
 
-/** Обратный отсчёт: Ч:ММ:СС, а если больше двух суток — в днях. */
+/** Обратный отсчёт: Ч:ММ:СС, а если больше двух суток - в днях. */
 export function fmtCountdown(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   if (total >= 48 * 3600) return `${Math.ceil(total / 86400)} дн.`;
@@ -16,7 +16,7 @@ export function fmtCountdown(ms) {
 }
 
 export function fmtDateTime(iso) {
-  return iso ? new Date(iso).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—";
+  return iso ? new Date(iso).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "-";
 }
 
 export function fmtTokens(n) {

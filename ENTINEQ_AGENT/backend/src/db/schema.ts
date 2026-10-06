@@ -39,11 +39,11 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: userRole("role").notNull(),
-  /** Лимит расходов на календарный месяц (UTC). null — без лимита. */
+  /** Лимит расходов на календарный месяц (UTC). null - без лимита. */
   monthlyBudgetUsd: usd("monthly_budget_usd"),
-  /** Лимит расходов на одно окно сессии (как 5-часовой лимит у подписок). null — без лимита. */
+  /** Лимит расходов на одно окно сессии (как 5-часовой лимит у подписок). null - без лимита. */
   windowLimitUsd: usd("window_limit_usd"),
-  /** Начало текущего окна — время первого сообщения после окончания прошлого окна. */
+  /** Начало текущего окна - время первого сообщения после окончания прошлого окна. */
   windowStartedAt: ts("window_started_at"),
   isActive: boolean("is_active").notNull().default(true),
   failedLogins: integer("failed_logins").notNull().default(0),
@@ -71,7 +71,7 @@ export const authSessions = pgTable(
 export const invites = pgTable("invites", {
   id: uuid("id").primaryKey().defaultRandom(),
   codeHash: text("code_hash").notNull().unique(),
-  /** Последние символы кода — чтобы владелец мог отличать приглашения в списке. */
+  /** Последние символы кода - чтобы владелец мог отличать приглашения в списке. */
   codeHint: text("code_hint").notNull(),
   monthlyBudgetUsd: usd("monthly_budget_usd"),
   windowLimitUsd: usd("window_limit_usd"),
@@ -94,7 +94,7 @@ export const conversations = pgTable(
     title: text("title").notNull(),
     /** Идентификатор сессии Agent SDK; по нему продолжается диалог (resume). */
     sdkSessionId: text("sdk_session_id"),
-    /** Последние накопительные итоги из SDK — база для вычисления расхода за ход. */
+    /** Последние накопительные итоги из SDK - база для вычисления расхода за ход. */
     usageSnapshot: jsonb("usage_snapshot").$type<UsageSnapshot>().notNull().default({}),
     createdAt: ts("created_at").notNull().defaultNow(),
     updatedAt: ts("updated_at").notNull().defaultNow(),
@@ -152,7 +152,7 @@ export const sdkSessionEntries = pgTable(
     seq: bigserial("seq", { mode: "number" }).primaryKey(),
     projectKey: text("project_key").notNull(),
     sessionId: text("session_id").notNull(),
-    /** Пустая строка — основной транскрипт; иначе путь субагента. */
+    /** Пустая строка - основной транскрипт; иначе путь субагента. */
     subpath: text("subpath").notNull().default(""),
     uuid: text("uuid"),
     entry: jsonb("entry").notNull(),

@@ -1,16 +1,16 @@
 /**
  * Живая проверка с настоящим Claude: три коротких хода на публичных правах (без инструментов).
- * Тратит реальные деньги (порядка нескольких центов) — поэтому запускается только с флагом --yes:
+ * Тратит реальные деньги (порядка нескольких центов) - поэтому запускается только с флагом --yes:
  *
  *   pnpm smoke:live -- --yes
  *
  * Нужны ANTHROPIC_API_KEY (в окружении или в .env). Модель берётся из PUBLIC_AGENT_MODEL / AGENT_MODEL;
  * для самой дешёвой проверки задайте PUBLIC_AGENT_MODEL=claude-haiku-4-5.
  *
- * Что проверяется — всё, чего нельзя проверить без настоящего API:
+ * Что проверяется - всё, чего нельзя проверить без настоящего API:
  *   1. адаптер Agent SDK получает ответ и сообщает идентификатор сессии;
  *   2. продолжение диалога (resume) сохраняет контекст и тот же идентификатор сессии;
- *   3. итоги расхода по моделям: накопительные они или нет — и совпадает ли учёт ENTINEQ с итогом SDK;
+ *   3. итоги расхода по моделям: накопительные они или нет - и совпадает ли учёт ENTINEQ с итогом SDK;
  *   4. транскрипт сессии попадает в Postgres-хранилище и по нему диалог продолжается «в новом контейнере».
  */
 import { mkdtemp } from "node:fs/promises";
@@ -41,7 +41,7 @@ const apiKey = cfg.anthropicApiKey!;
 const results: { name: string; ok: boolean; detail?: string }[] = [];
 const check = (name: string, ok: boolean, detail = "") => {
   results.push({ name, ok, detail });
-  console.log(`${ok ? "  ✓" : "  ✗ ПРОВАЛ:"} ${name}${detail ? `  — ${detail}` : ""}`);
+  console.log(`${ok ? "  ✓" : "  ✗ ПРОВАЛ:"} ${name}${detail ? `  - ${detail}` : ""}`);
 };
 
 const handle = await openDb({ pglite: "memory" });
@@ -70,7 +70,7 @@ try {
   check("ответ получен, результат успешный", Boolean(first.result?.ok) && first.text.length > 0, first.result?.errorMessage ?? "");
   check("есть идентификатор сессии", Boolean(first.sessionId));
   check("есть итоги по моделям и токены вызова", Object.keys(first.result?.modelUsage ?? {}).length > 0 && (first.result?.callTokens ?? 0) > 0, JSON.stringify({ callTokens: first.result?.callTokens, cost: first.result?.totalCostUsd }));
-  check("текст пришёл кусками (потоковые события)", first.events.some((e) => e.kind === "delta"), "если нет — интерфейс покажет ответ сразу целиком");
+  check("текст пришёл кусками (потоковые события)", first.events.some((e) => e.kind === "delta"), "если нет - интерфейс покажет ответ сразу целиком");
 
   console.log("\nХод 2: продолжение сессии (resume)");
   const second = await turn("Какое слово я просил запомнить? Ответь одним словом.", first.sessionId, policy);
@@ -90,14 +90,14 @@ try {
   check("учёт расхода за ход согласован с итогами SDK", matches, `режим ${mode}`);
   console.log(
     mode === "cumulative"
-      ? "    (итоги SDK накопительные — как и описано в документации)"
-      : "    (внимание: итоги SDK начались заново — учёт это обрабатывает, но стоит сообщить об этом разработчику)",
+      ? "    (итоги SDK накопительные - как и описано в документации)"
+      : "    (внимание: итоги SDK начались заново - учёт это обрабатывает, но стоит сообщить об этом разработчику)",
   );
 
   const stored = await handle.db.select({ seq: sdkSessionEntries.seq }).from(sdkSessionEntries);
   check("транскрипт сессии записан в Postgres-хранилище", stored.length > 0, `записей: ${stored.length}`);
 
-  console.log("\nХод 3: «новый контейнер» — пустая локальная папка, сессия поднимается только из Postgres");
+  console.log("\nХод 3: «новый контейнер» - пустая локальная папка, сессия поднимается только из Postgres");
   const freshConfigDir = await mkdtemp(join(tmpdir(), "entineq-smoke-fresh-"));
   const third = await turn("Повтори слово, которое я просил запомнить, одним словом.", first.sessionId, { ...policy, configDir: freshConfigDir });
   check("диалог продолжился из хранилища и помнит контекст", /бирюз/i.test(third.text), third.text);

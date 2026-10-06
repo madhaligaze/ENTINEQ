@@ -32,7 +32,7 @@ export async function api(method, path, body, { silent401 = false } = {}) {
   try {
     data = await response.json();
   } catch {
-    // тело не JSON — сообщение возьмём из статуса
+    // тело не JSON - сообщение возьмём из статуса
   }
   if (!response.ok) {
     const error = data && data.error ? data.error : {};

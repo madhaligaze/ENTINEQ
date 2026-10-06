@@ -60,7 +60,7 @@ export class AuthService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  /** Создаёт владельца при первом запуске. Если владелец уже есть — ничего не меняет. */
+  /** Создаёт владельца при первом запуске. Если владелец уже есть - ничего не меняет. */
   async bootstrapOwner(email: string, password: string): Promise<boolean> {
     assertPasswordAcceptable(password);
     const [existing] = await this.db.select({ id: users.id }).from(users).where(eq(users.role, "owner")).limit(1);

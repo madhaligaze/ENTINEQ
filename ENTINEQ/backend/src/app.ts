@@ -27,7 +27,7 @@ export async function buildApp(cfg: Config): Promise<BuiltApp> {
     bodyLimit: 100 * 1024,
   });
 
-  // Принимаем только JSON. text/plain — «простой» тип запроса, который браузер шлёт с чужого сайта без предварительной проверки.
+  // Принимаем только JSON. text/plain - «простой» тип запроса, который браузер шлёт с чужого сайта без предварительной проверки.
   app.removeContentTypeParser("text/plain");
 
   app.setErrorHandler((error: unknown, req, reply) => {
@@ -51,7 +51,7 @@ export async function buildApp(cfg: Config): Promise<BuiltApp> {
     return reply.code(500).send({ error: { code: "internal_error", message: "Внутренняя ошибка сервера." } });
   });
 
-  // Это чистый API: страниц здесь нет, на любой неизвестный адрес — одинаковый JSON.
+  // Это чистый API: страниц здесь нет, на любой неизвестный адрес - одинаковый JSON.
   app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: { code: "not_found", message: "Не найдено." } }));
 
   await app.register(helmet, {
@@ -68,11 +68,11 @@ export async function buildApp(cfg: Config): Promise<BuiltApp> {
 
   const core = new CoreClient(cfg, app.log);
 
-  /** Корень — просто «жив ли и что за сервис»: пригодится, когда адрес бэкенда открывают в браузере. */
+  /** Корень - просто «жив ли и что за сервис»: пригодится, когда адрес бэкенда открывают в браузере. */
   app.get("/", async () => ({ service: "entineq-backend", ok: true }));
 
   /** Живость самого приложения: по ней Railway решает, что деплой удался. От доступности ядра не зависит. */
-  // Пробы здоровья дёргаются каждые несколько секунд — их запросы в журнал не пишем.
+  // Пробы здоровья дёргаются каждые несколько секунд - их запросы в журнал не пишем.
   app.get("/healthz", { logLevel: "warn" }, async () => ({ ok: true }));
 
   /** Готовность: видит ли приложение ядро, принял ли оно секрет и совпадает ли версия контракта. */
@@ -84,7 +84,7 @@ export async function buildApp(cfg: Config): Promise<BuiltApp> {
       }
       return { ok: true };
     } catch (error) {
-      // Нет маршрута /internal/ping — значит, ядро старше этого приложения: версии не совпадают.
+      // Нет маршрута /internal/ping - значит, ядро старше этого приложения: версии не совпадают.
       const reason = error instanceof AppError ? (error.code === "not_found" ? "contract_mismatch" : error.code) : "core_unreachable";
       return reply.code(503).send({ ok: false, reason });
     }

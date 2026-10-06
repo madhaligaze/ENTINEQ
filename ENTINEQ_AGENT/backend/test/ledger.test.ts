@@ -61,7 +61,7 @@ describe("diffUsage (расход за ход из накопительных и
     expect(diffUsage({}, { m: totals(0.5) })).toEqual([{ model: "m", ...totals(0.5) }]);
   });
 
-  it("продолжение сессии: берётся только разница — прошлые ходы не считаются второй раз", () => {
+  it("продолжение сессии: берётся только разница - прошлые ходы не считаются второй раз", () => {
     const delta = diffUsage({ m: totals(0.5, 100, 50) }, { m: totals(0.8, 250, 90) });
     expect(delta).toEqual([{ model: "m", inputTokens: 150, outputTokens: 40, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, costUSD: 0.3 }]);
   });
@@ -70,7 +70,7 @@ describe("diffUsage (расход за ход из накопительных и
     expect(diffUsage({ m: totals(5, 1000, 500) }, { m: totals(0.2, 10, 5) })).toEqual([{ model: "m", ...totals(0.2, 10, 5) }]);
   });
 
-  it("новая модель в итогах считается целиком, старая без изменений — пропускается", () => {
+  it("новая модель в итогах считается целиком, старая без изменений - пропускается", () => {
     const result = diffUsage({ a: totals(1) }, { a: totals(1), b: totals(0.25) });
     expect(result.map((d) => d.model)).toEqual(["b"]);
   });
@@ -85,7 +85,7 @@ describe("diffUsage (расход за ход из накопительных и
   });
 });
 
-describe("classifyUsage — накопительные ли итоги SDK", () => {
+describe("classifyUsage - накопительные ли итоги SDK", () => {
   const prev = { m: totals(1, 1000, 500) }; // всего 1500 токенов
   it("первый ход: сравнивать не с чем", () => {
     expect(classifyUsage({}, { m: totals(0.5) }, 150)).toBe("first");
@@ -97,7 +97,7 @@ describe("classifyUsage — накопительные ли итоги SDK", () 
   });
 
   it("итоги начались заново: счётчики выросли, но прирост меньше токенов самого вызова", () => {
-    // Вызов потратил 5000 токенов, а «итоги» всего 5200: вычитание прошлых 1500 дало бы 3700 — меньше 5000.
+    // Вызов потратил 5000 токенов, а «итоги» всего 5200: вычитание прошлых 1500 дало бы 3700 - меньше 5000.
     expect(classifyUsage(prev, { m: totals(1.1, 3500, 1700) }, 5000)).toBe("restart");
   });
 
@@ -111,7 +111,7 @@ describe("classifyUsage — накопительные ли итоги SDK", () 
     expect(classifyUsage(prev, { m: totals(1.3, 1200, 600) }, 0)).toBe("cumulative");
   });
 
-  it("diffUsage при «начатых заново» итогах берёт их целиком — расход не теряется", () => {
+  it("diffUsage при «начатых заново» итогах берёт их целиком - расход не теряется", () => {
     const delta = diffUsage(prev, { m: totals(1.1, 3500, 1700) }, 5000);
     expect(delta).toHaveLength(1);
     expect(delta[0]).toMatchObject({ model: "m", costUSD: 1.1, inputTokens: 3500, outputTokens: 1700 });
@@ -158,7 +158,7 @@ const status = (overrides: Partial<LimitStatus> = {}): LimitStatus => ({
 });
 
 describe("blockReason и turnBudgetUsd", () => {
-  it("лимитов нет — не блокирует", () => {
+  it("лимитов нет - не блокирует", () => {
     expect(blockReason(status(), now)).toBeNull();
     expect(turnBudgetUsd(status())).toBeUndefined();
   });
@@ -176,7 +176,7 @@ describe("blockReason и turnBudgetUsd", () => {
 
   it("окно не блокирует, пока не достигнут лимит, и после своего окончания", () => {
     expect(blockReason(status({ windowActive: true, windowResetsAt: now, windowLimitUsd: 1, windowSpentUsd: 0.99 }), now)).toBeNull();
-    // Окно закончилось: getLimitStatus отдаёт windowActive=false и нулевой расход — блокировки нет.
+    // Окно закончилось: getLimitStatus отдаёт windowActive=false и нулевой расход - блокировки нет.
     expect(blockReason(status({ windowActive: false, windowLimitUsd: 1 }), now)).toBeNull();
   });
 
@@ -192,7 +192,7 @@ describe("blockReason и turnBudgetUsd", () => {
     expect(block?.resetsAt).toBeNull();
   });
 
-  it("потолок хода — меньший из остатков", () => {
+  it("потолок хода - меньший из остатков", () => {
     expect(turnBudgetUsd(status({ monthBudgetUsd: 10, monthSpentUsd: 9.5, windowLimitUsd: 1, windowActive: true, windowSpentUsd: 0.2 }))).toBeCloseTo(0.5);
     expect(turnBudgetUsd(status({ windowLimitUsd: 1, windowActive: true, windowSpentUsd: 0.3 }))).toBeCloseTo(0.7);
     expect(turnBudgetUsd(status({ windowLimitUsd: 1, windowActive: false }))).toBe(1);
@@ -224,13 +224,13 @@ describe("учёт в БД", () => {
     return { user: user!, conversation: conversation! };
   }
 
-  it("openWindow: первое сообщение открывает окно, внутри окна оно то же, после окончания — новое", async () => {
+  it("openWindow: первое сообщение открывает окно, внутри окна оно то же, после окончания - новое", async () => {
     const { user } = await setup();
     const t0 = new Date("2026-10-07T10:00:00Z");
     expect(await openWindow(handle.db, user.id, 5, t0)).toEqual(t0);
     // Через 4 ч 59 мин окно ещё то же.
     expect(await openWindow(handle.db, user.id, 5, new Date(t0.getTime() + (5 * 60 - 1) * 60_000))).toEqual(t0);
-    // Ровно через 5 часов — уже новое, отсчёт идёт с этого сообщения.
+    // Ровно через 5 часов - уже новое, отсчёт идёт с этого сообщения.
     const t1 = new Date(t0.getTime() + 5 * 3_600_000);
     expect(await openWindow(handle.db, user.id, 5, t1)).toEqual(t1);
   });
