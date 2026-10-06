@@ -1,0 +1,21 @@
+# Только база данных для локальной разработки ядра: pnpm db:up
+# Строка подключения для .env:  DATABASE_URL=postgres://entineq:entineq@localhost:5432/entineq
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: entineq
+      POSTGRES_PASSWORD: entineq
+      POSTGRES_DB: entineq
+    ports:
+      - "5432:5432"
+    volumes:
+      - entineq-agent-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U entineq"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  entineq-agent-db:

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>ENTINEQ — powered by Claude</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236ea8fe'/%3E%3Cpath d='M9 9h14v3H13v3h8v3h-8v3h10v3H9z' fill='%23081326'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/js/main.js"></script>
+</head>
+<body>
+  <main id="boot-view" class="center muted">Загрузка…</main>
+
+  <main id="auth-view" class="center" hidden>
+    <div class="card">
+      <div class="logo">
+        <span class="logo-mark" aria-hidden="true">E</span>
+        <div><strong>ENTINEQ</strong><span class="muted"> · powered by Claude</span></div>
+      </div>
+
+      <div class="segmented" role="tablist" aria-label="Вход или регистрация">
+        <button id="tab-login" type="button" role="tab" aria-selected="true">Вход</button>
+        <button id="tab-register" type="button" role="tab" aria-selected="false">Регистрация</button>
+      </div>
+
+      <form id="login-form" novalidate>
+        <label for="login-email">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required>
+        <label for="login-password">Пароль</label>
+        <input id="login-password" type="password" autocomplete="current-password" required>
+        <p id="login-error" class="error" role="alert" hidden></p>
+        <button id="login-submit" type="submit" class="primary">Войти</button>
+      </form>
+
+      <form id="register-form" novalidate hidden>
+        <p class="muted small">Регистрация — только по приглашению. Код вам выдаёт администратор.</p>
+        <label for="register-code">Код приглашения</label>
+        <input id="register-code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ENT-XXXX-XXXX-XXXX" required>
+        <label for="register-email">Email</label>
+        <input id="register-email" type="email" autocomplete="username" required>
+        <label for="register-password">Пароль (минимум 10 символов)</label>
+        <input id="register-password" type="password" autocomplete="new-password" minlength="10" required>
+        <p id="register-error" class="error" role="alert" hidden></p>
+        <button id="register-submit" type="submit" class="primary">Создать аккаунт</button>
+      </form>
+    </div>
+  </main>
+
+  <div id="app-view" class="app" hidden>
+    <header class="topbar">
+      <button id="sidebar-toggle" class="ghost only-narrow" type="button" aria-label="Диалоги" aria-expanded="false">☰</button>
+      <div class="logo small"><span class="logo-mark" aria-hidden="true">E</span><strong>ENTINEQ</strong><span class="muted hide-narrow"> · powered by Claude</span></div>
+      <span class="spacer"></span>
+      <span id="user-email" class="muted user-email"></span>
+      <button id="logout" class="ghost" type="button">Выйти</button>
+    </header>
+
+    <div class="layout">
+      <aside id="sidebar" class="sidebar" aria-label="Диалоги">
+        <button id="new-chat" class="primary" type="button">+ Новый диалог</button>
+        <ul id="conversation-list" class="conversations"></ul>
+        <section id="usage" class="usage" aria-label="Лимиты">
+          <div class="usage-title">Лимит сессии <span id="usage-hours"></span></div>
+          <div id="usage-bar" class="bar" hidden><div id="usage-bar-fill" class="bar-fill"></div></div>
+          <div id="usage-window-line" class="usage-line"></div>
+          <div id="usage-timer" class="usage-line"></div>
+          <div id="usage-month-line" class="usage-line muted"></div>
+        </section>
+      </aside>
+
+      <section class="chat" aria-label="Чат">
+        <div id="messages" class="messages" aria-live="polite"></div>
+        <div id="banner" class="banner" role="status" hidden></div>
+        <form id="composer" class="composer">
+          <textarea id="input" rows="2" maxlength="20000" placeholder="Спросите что-нибудь…" aria-label="Сообщение"></textarea>
+          <button id="send" class="primary" type="submit">Отправить</button>
+        </form>
+        <div id="status" class="status muted">подключение…</div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# Единые переводы строк (LF): иначе Dockerfile и скрипты на Windows ломаются в Linux-контейнере.
+* text=auto eol=lf
+*.png binary

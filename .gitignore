@@ -1,0 +1,37 @@
+# зависимости и сборка
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# секреты и локальное окружение
+.env
+.env.*
+!.env.example
+
+# локальные данные (встроенная БД и рабочие папки агента)
+.data/
+
+# тесты и покрытие
+coverage/
+
+# логи
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ОС
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# редакторы
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code
+.claude/
+CLAUDE.md
+CLAUDE.local.md

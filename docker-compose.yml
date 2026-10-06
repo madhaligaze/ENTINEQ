@@ -1,0 +1,57 @@
+# Вся связка локально одной командой:  docker compose up --build
+#   ENTINEQ_AGENT (ядро и интерфейс доверенных):  http://localhost:8080
+#   ENTINEQ (публичное приложение):               http://localhost:8081
+# По умолчанию вместо Claude отвечает заглушка (бесплатно). Для настоящего Claude создайте рядом файл .env:
+#   AGENT_RUNNER=claude
+#   ANTHROPIC_API_KEY=sk-ant-...
+# Корневой docker-compose.yml нужен только для локальной проверки: в Railway каждый проект деплоится отдельно.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: entineq
+      POSTGRES_PASSWORD: entineq
+      POSTGRES_DB: entineq
+    volumes:
+      - entineq-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U entineq"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  agent:
+    build: ./ENTINEQ_AGENT
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://entineq:entineq@db:5432/entineq
+      INTERNAL_API_SECRET: local-dev-shared-secret-change-me-0123456789abcdef
+      OWNER_EMAIL: ${OWNER_EMAIL:-owner@example.com}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-owner-password-123}
+      AGENT_RUNNER: ${AGENT_RUNNER:-fake}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Локально открываем по http://localhost, поэтому cookie без флага Secure. В продакшене (https) этой строки нет.
+      COOKIE_SECURE: "false"
+      TRUST_PROXY_HOPS: "0"
+    volumes:
+      - entineq-agent-data:/data
+
+  public:
+    build: ./ENTINEQ
+    depends_on:
+      - agent
+    ports:
+      - "8081:8080"
+    environment:
+      AGENT_BASE_URL: http://agent:8080
+      INTERNAL_API_SECRET: local-dev-shared-secret-change-me-0123456789abcdef
+      COOKIE_SECURE: "false"
+      TRUST_PROXY_HOPS: "0"
+
+volumes:
+  entineq-db:
+  entineq-agent-data:
