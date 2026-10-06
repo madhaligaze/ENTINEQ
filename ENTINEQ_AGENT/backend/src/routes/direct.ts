@@ -34,7 +34,7 @@ export async function registerDirect(app: FastifyInstance, ctx: AppContext): Pro
         const body = loginBody.parse(req.body);
         const session = await auth.login({ ...body, entry: "direct" });
         setSessionCookie(reply, cfg, session.token, session.expiresAt);
-        const actor: Actor = { userId: session.user.id, email: session.user.email, role: session.user.role, entry: "direct" };
+        const actor: Actor = { userId: session.user.id, email: session.user.email, role: session.user.role, entry: "direct", guest: false };
         return { user: session.user, usage: await chat.usageFor(actor) };
       });
 

@@ -1,0 +1,16 @@
+{
+  "name": "entineq-e2e",
+  "private": true,
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "preinstall": "npx --yes only-allow pnpm",
+    "test": "node core.e2e.cjs && node full.e2e.cjs && node cookie-secure.e2e.cjs && node ui-style.e2e.cjs",
+    "test:compose": "node compose.e2e.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

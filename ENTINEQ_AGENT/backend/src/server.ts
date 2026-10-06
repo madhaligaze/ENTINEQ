@@ -1,7 +1,11 @@
 import { join } from "node:path";
-import { createPgSessionStore } from "./agent/session-store.js";
+import Anthropic from "@anthropic-ai/sdk";
+import { ChatRunner } from "./agent/chat-runner.js";
 import { ClaudeAgentRunner } from "./agent/claude-runner.js";
 import { FakeAgentRunner } from "./agent/fake-runner.js";
+import { ManagedAgentRunner } from "./agent/managed-runner.js";
+import { createPgSessionStore } from "./agent/session-store.js";
+import type { AgentRunner } from "./agent/types.js";
 import { PasswordHasher } from "./auth/password.js";
 import { buildApp } from "./app.js";
 import { ConfigError, loadConfig, type Config } from "./config.js";
@@ -29,15 +33,36 @@ const handle = await openDb(
 );
 await handle.migrate();
 
-const runner =
-  cfg.agentRunner === "fake"
-    ? new FakeAgentRunner()
-    : new ClaudeAgentRunner(cfg.anthropicApiKey!, createPgSessionStore(handle.db));
+// Три движка: агент в контейнере ядра (владелец и доверенные), чат без инструментов (публичные), песочница (подписчики, по желанию).
+let runner: AgentRunner;
+let chatRunner: AgentRunner;
+let sandboxRunner: AgentRunner | undefined;
+if (cfg.agentRunner === "fake") {
+  runner = new FakeAgentRunner();
+  chatRunner = new FakeAgentRunner({ usage: "delta" });
+  sandboxRunner = new FakeAgentRunner();
+} else {
+  const client = new Anthropic({ apiKey: cfg.anthropicApiKey! });
+  runner = new ClaudeAgentRunner(cfg.anthropicApiKey!, createPgSessionStore(handle.db));
+  chatRunner = new ChatRunner(client);
+  if (cfg.sandbox.mode === "managed") {
+    sandboxRunner = new ManagedAgentRunner(client, {
+      agentId: cfg.sandbox.agentId!,
+      environmentId: cfg.sandbox.environmentId!,
+      defaultCapUsd: cfg.sandbox.turnMaxBudgetUsd,
+    });
+  }
+}
 
-const { app, auth, chat } = await buildApp({ cfg, db: handle.db, runner, hasher: new PasswordHasher() });
+const { app, auth, chat } = await buildApp({ cfg, db: handle.db, runner, chatRunner, sandboxRunner, hasher: new PasswordHasher() });
 
 if (!cfg.databaseUrl) app.log.warn("DATABASE_URL не задан - используется локальная встроенная БД (только для разработки).");
 if (cfg.agentRunner === "fake") app.log.warn("AGENT_RUNNER=fake - вместо Claude отвечает заглушка. Для настоящей работы уберите эту переменную.");
+app.log.info(
+  cfg.sandbox.mode === "managed"
+    ? "Терминал для подписчиков: песочница Anthropic Managed Agents."
+    : "Терминал для публичных пользователей выключен (SANDBOX_MODE=off).",
+);
 
 if (cfg.ownerEmail && cfg.ownerPassword) {
   const created = await auth.bootstrapOwner(cfg.ownerEmail, cfg.ownerPassword);
@@ -46,8 +71,16 @@ if (cfg.ownerEmail && cfg.ownerPassword) {
   app.log.warn("OWNER_EMAIL/OWNER_PASSWORD не заданы - первый вход невозможен, пока владельца нет.");
 }
 
+// Раз в час: просроченные сессии входа, давние диалоги гостей, забытые песочницы.
+async function housekeeping(): Promise<void> {
+  await auth.purgeExpired();
+  const guests = await auth.purgeGuests(cfg.guests.retentionDays);
+  if (guests.conversations || guests.guests) app.log.info(guests, "убраны давние диалоги и гости");
+  const sandboxes = await chat.purgeSandboxSessions();
+  if (sandboxes) app.log.info({ sandboxes }, "освобождены давние сессии песочницы");
+}
 const purgeTimer = setInterval(() => {
-  auth.purgeExpired().catch((error) => app.log.error(error));
+  housekeeping().catch((error) => app.log.error(error));
 }, 3_600_000);
 purgeTimer.unref();
 

@@ -2,7 +2,10 @@ import { mkdir } from "node:fs/promises";
 import { query, type Options, type SessionStore } from "@anthropic-ai/claude-agent-sdk";
 import { redactSecrets } from "../errors.js";
 import { normalizeModelUsage } from "../usage/ledger.js";
+import { summarizeTool } from "./summary.js";
 import type { AgentEvent, AgentRunner, AgentTurnInput } from "./types.js";
+
+export { summarizeTool };
 
 /** Имена переменных окружения, которые агент не должен видеть (у него есть терминал). */
 const SENSITIVE_ENV = /(SECRET|PASSWORD|PASSWD|TOKEN|DATABASE|PGPASSWORD|PRIVATE|CREDENTIAL)/i;
@@ -32,20 +35,6 @@ export function buildAgentEnv(
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
-}
-
-/** Коротко описывает вызов инструмента для панели «действия агента». */
-export function summarizeTool(name: string, input: unknown): string {
-  const data = asRecord(input) ?? {};
-  const pick = (...keys: string[]) => keys.map((key) => data[key]).find((value): value is string => typeof value === "string");
-  const text =
-    name === "Bash" ? pick("command")
-    : name === "Read" || name === "Write" || name === "Edit" ? pick("file_path", "path")
-    : name === "WebFetch" ? pick("url")
-    : name === "WebSearch" ? pick("query")
-    : pick("pattern", "command", "file_path", "path", "url", "query");
-  const summary = text ?? JSON.stringify(input ?? {});
-  return redactSecrets(summary.length > 500 ? `${summary.slice(0, 500)}…` : summary);
 }
 
 /** Токены самого вызова из поля `usage` результата (оно считается по основному циклу и не накопительное). */

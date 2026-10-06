@@ -3,6 +3,7 @@ import {
   bigint,
   bigserial,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -33,23 +34,38 @@ export type UsageSnapshot = Record<
   }
 >;
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  /** Всегда в нижнем регистре и без пробелов по краям. */
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  role: userRole("role").notNull(),
-  /** Лимит расходов на календарный месяц (UTC). null - без лимита. */
-  monthlyBudgetUsd: usd("monthly_budget_usd"),
-  /** Лимит расходов на одно окно сессии (как 5-часовой лимит у подписок). null - без лимита. */
-  windowLimitUsd: usd("window_limit_usd"),
-  /** Начало текущего окна - время первого сообщения после окончания прошлого окна. */
-  windowStartedAt: ts("window_started_at"),
-  isActive: boolean("is_active").notNull().default(true),
-  failedLogins: integer("failed_logins").notNull().default(0),
-  lockedUntil: ts("locked_until"),
-  createdAt: ts("created_at").notNull().defaultNow(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Всегда в нижнем регистре и без пробелов по краям. null - гость: аккаунт без входа, создаётся при первом сообщении. */
+    email: text("email").unique(),
+    passwordHash: text("password_hash"),
+    role: userRole("role").notNull(),
+    /** Лимит расходов на календарный месяц (UTC) для подписчика. null - без лимита. */
+    monthlyBudgetUsd: usd("monthly_budget_usd"),
+    /** Лимит расходов на одно окно сессии (как 5-часовой лимит у подписок) для подписчика. null - без лимита. */
+    windowLimitUsd: usd("window_limit_usd"),
+    /** Начало текущего окна - время первого сообщения после окончания прошлого окна. */
+    windowStartedAt: ts("window_started_at"),
+    isActive: boolean("is_active").notNull().default(true),
+    failedLogins: integer("failed_logins").notNull().default(0),
+    lockedUntil: ts("locked_until"),
+    /** Сколько бесплатных запросов уже потрачено (предел - FREE_REQUESTS). Гость при регистрации сохраняет счётчик. */
+    freeUsed: integer("free_used").notNull().default(0),
+    /** Подписка действует до этого момента; null - подписки не было. Выдаёт владелец в админке. */
+    subscribedUntil: ts("subscribed_until"),
+    /** HMAC адреса, с которого создан аккаунт: нужен для предела числа новых гостей с одного адреса. Сам адрес не хранится. */
+    signupIpHash: text("signup_ip_hash"),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    // Гость - аккаунт без email и без пароля, всегда публичный; настоящий аккаунт имеет и то и другое.
+    check("users_credentials_pair", sql`(${t.email} is null) = (${t.passwordHash} is null)`),
+    check("users_guest_is_public", sql`${t.email} is not null or ${t.role} = 'public'`),
+    index("users_signup_ip_idx").on(t.signupIpHash, t.createdAt),
+  ],
+);
 
 export const authSessions = pgTable(
   "auth_sessions",
@@ -68,20 +84,23 @@ export const authSessions = pgTable(
   (t) => [index("auth_sessions_user_idx").on(t.userId), index("auth_sessions_expires_idx").on(t.expiresAt)],
 );
 
-export const invites = pgTable("invites", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  codeHash: text("code_hash").notNull().unique(),
-  /** Последние символы кода - чтобы владелец мог отличать приглашения в списке. */
-  codeHint: text("code_hint").notNull(),
-  monthlyBudgetUsd: usd("monthly_budget_usd"),
-  windowLimitUsd: usd("window_limit_usd"),
-  expiresAt: ts("expires_at").notNull(),
-  usedBy: uuid("used_by").references(() => users.id, { onDelete: "set null" }),
-  usedAt: ts("used_at"),
-  revokedAt: ts("revoked_at"),
-  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  createdAt: ts("created_at").notNull().defaultNow(),
-});
+/**
+ * Бесплатные запросы: по строке на каждый занятый запрос. Нужны для предела числа бесплатных запросов с одного адреса
+ * в сутки (пользователь может очистить cookie и стать новым гостем, а адрес остаётся тем же).
+ */
+export const freeTurns = pgTable(
+  "free_turns",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** HMAC адреса (для IPv6 - сети /64). */
+    ipHash: text("ip_hash").notNull(),
+    createdAt: ts("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("free_turns_ip_idx").on(t.ipHash, t.createdAt)],
+);
 
 export const conversations = pgTable(
   "conversations",
@@ -92,7 +111,14 @@ export const conversations = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     entry: text("entry").notNull(),
     title: text("title").notNull(),
-    /** Идентификатор сессии Agent SDK; по нему продолжается диалог (resume). */
+    /**
+     * Чем ведётся диалог: agent - Claude Agent SDK в контейнере ядра (владелец и доверенные),
+     * chat - обычный чат через Messages API без инструментов (публичные),
+     * managed - агент с терминалом в изолированной песочнице Anthropic Managed Agents (подписчики).
+     * Выбирается при создании диалога и дальше не меняется.
+     */
+    engine: text("engine").notNull().default("agent"),
+    /** Идентификатор сессии движка: сессия Agent SDK (resume) либо сессия Managed Agents. У чата пусто. */
     sdkSessionId: text("sdk_session_id"),
     /** Последние накопительные итоги из SDK - база для вычисления расхода за ход. */
     usageSnapshot: jsonb("usage_snapshot").$type<UsageSnapshot>().notNull().default({}),
@@ -135,13 +161,18 @@ export const usageEvents = pgTable(
     costUsd: numeric("cost_usd", { precision: 16, scale: 8 }).notNull(),
     /** success или подтип ошибки SDK (error_max_turns и т.д.). */
     outcome: text("outcome").notNull(),
-    /** Начало окна сессии, в котором начался ход: к нему относится расход. */
+    /** Начало окна сессии, в котором начался ход: к нему относится расход. У бесплатных запросов окна нет - там момент хода. */
     windowStart: ts("window_start").notNull(),
+    /** Ход оплачен из бесплатной квоты: из таких расходов складывается суточный запас бесплатных запросов (FREE_DAILY_BUDGET_USD). */
+    isFree: boolean("is_free").notNull().default(false),
     createdAt: ts("created_at").notNull().defaultNow(),
   },
   (t) => [
     index("usage_events_user_created_idx").on(t.userId, t.createdAt),
     index("usage_events_user_window_idx").on(t.userId, t.windowStart),
+    index("usage_events_free_idx")
+      .on(t.createdAt)
+      .where(sql`${t.isFree}`),
   ],
 );
 

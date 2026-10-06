@@ -1,0 +1,191 @@
+# Проверки при push в main и в pull request.
+# Деплой в Railway этот файл не делает: Railway собирает образы сам, когда изменения попадают в его репозиторий.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  style:
+    name: style
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Длинное тире
+        run: node e2e/check-style.cjs
+      - name: Совпадение продублированных файлов
+        run: node e2e/check-sync.cjs
+
+  test:
+    name: ${{ matrix.dir }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        dir:
+          - ENTINEQ/backend
+          - ENTINEQ/frontend
+          - ENTINEQ_AGENT/backend
+          - ENTINEQ_AGENT/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.dir }}/pnpm-lock.yaml
+      - name: Install
+        working-directory: ${{ matrix.dir }}
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        working-directory: ${{ matrix.dir }}
+        run: pnpm typecheck
+      - name: Test
+        working-directory: ${{ matrix.dir }}
+        run: pnpm test
+
+  test-postgres:
+    name: ENTINEQ_AGENT/backend PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ENTINEQ_AGENT/backend/pnpm-lock.yaml
+      - name: Install
+        working-directory: ENTINEQ_AGENT/backend
+        run: pnpm install --frozen-lockfile
+      - name: Test on PostgreSQL
+        working-directory: ENTINEQ_AGENT/backend
+        env:
+          TEST_DATABASE_URL: postgres://postgres@localhost:5432/postgres
+        run: pnpm test
+
+  e2e:
+    name: browser e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: |
+            ENTINEQ/backend/pnpm-lock.yaml
+            ENTINEQ/frontend/pnpm-lock.yaml
+            ENTINEQ_AGENT/backend/pnpm-lock.yaml
+            ENTINEQ_AGENT/frontend/pnpm-lock.yaml
+            e2e/pnpm-lock.yaml
+      - name: PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Install and build services
+        run: |
+          set -euo pipefail
+          for dir in ENTINEQ/backend ENTINEQ/frontend ENTINEQ_AGENT/backend ENTINEQ_AGENT/frontend; do
+            echo "== $dir =="
+            pnpm --dir "$dir" install --frozen-lockfile
+            pnpm --dir "$dir" build
+          done
+      - name: Install e2e
+        working-directory: e2e
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: pnpm install --frozen-lockfile
+      - name: Chromium
+        working-directory: e2e
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Core
+        run: node e2e/core.e2e.cjs
+      - name: Cookie Secure
+        run: node e2e/cookie-secure.e2e.cjs
+      - name: Full stack
+        run: node e2e/full.e2e.cjs
+      - name: UI style
+        run: node e2e/ui-style.e2e.cjs
+
+  compose:
+    name: docker compose e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: e2e/pnpm-lock.yaml
+      - name: Install e2e
+        working-directory: e2e
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+        run: pnpm install --frozen-lockfile
+      - name: Chromium
+        working-directory: e2e
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Compose up
+        run: docker compose up --build -d --wait --wait-timeout 300
+      - name: Compose e2e
+        run: node e2e/compose.e2e.cjs
+      - name: Logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Compose down
+        if: always()
+        run: docker compose down -v

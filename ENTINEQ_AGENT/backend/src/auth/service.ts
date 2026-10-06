@@ -1,10 +1,12 @@
-import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, lt, sql } from "drizzle-orm";
+import { utcDay } from "../access.js";
 import type { Db } from "../db/index.js";
-import { authSessions, invites, users } from "../db/schema.js";
+import { authSessions, conversations, users } from "../db/schema.js";
 import { AppError, errors, isUniqueViolation } from "../errors.js";
 import { ENTRY_ROLES, type Actor, type Entry, type PublicUser } from "../types.js";
+import { humanDuration } from "../usage/format.js";
 import type { PasswordHasher } from "./password.js";
-import { hashInviteCode, hashToken, newInviteCode, newSessionToken } from "./tokens.js";
+import { hashToken, newSessionToken } from "./tokens.js";
 
 const MAX_FAILED_LOGINS = 8;
 const LOCK_MINUTES = 10;
@@ -23,12 +25,11 @@ export function assertPasswordAcceptable(password: string): void {
 }
 
 type UserRow = typeof users.$inferSelect;
-const toPublic = (user: UserRow): PublicUser => ({ id: user.id, email: user.email, role: user.role });
+const toPublic = (user: UserRow): PublicUser => ({ id: user.id, email: user.email, role: user.role, guest: user.email === null });
 const usd = (value: number | null) => (value === null ? null : value.toFixed(6));
 
 const invalidCredentials = () => new AppError("invalid_credentials", "Неверный email или пароль.", 401);
 const emailTaken = () => errors.conflict("email_taken", "Этот email уже зарегистрирован.");
-const invalidInvite = () => new AppError("invalid_invite", "Приглашение недействительно или уже использовано.", 400);
 
 export interface SessionGrant {
   token: string;
@@ -40,17 +41,15 @@ export interface Limits {
   windowLimitUsd: number | null;
 }
 
-export interface InviteView {
-  id: string;
-  codeHint: string;
-  monthlyBudgetUsd: number | null;
-  windowLimitUsd: number | null;
-  expiresAt: Date;
-  createdAt: Date;
-  usedAt: Date | null;
-  usedByEmail: string | null;
-  status: "active" | "used" | "revoked" | "expired";
+/** Настройки, от которых зависит заведение аккаунтов. */
+export interface AuthPolicy {
+  /** Сколько новых аккаунтов (гостевых и настоящих) в сутки (UTC) можно завести с одного адреса. */
+  signupIpDailyCap: number;
+  /** Лимиты, которые получает подписчик, пока владелец не изменил их вручную. */
+  publicDefaults: Limits;
 }
+
+const DEFAULT_POLICY: AuthPolicy = { signupIpDailyCap: 30, publicDefaults: { monthlyBudgetUsd: 10, windowLimitUsd: 1 } };
 
 export class AuthService {
   constructor(
@@ -58,6 +57,7 @@ export class AuthService {
     private readonly sessionTtlDays: number,
     private readonly hasher: PasswordHasher,
     private readonly now: () => Date = () => new Date(),
+    private readonly policy: AuthPolicy = DEFAULT_POLICY,
   ) {}
 
   /** Создаёт владельца при первом запуске. Если владелец уже есть - ничего не меняет. */
@@ -97,86 +97,83 @@ export class AuthService {
     }
   }
 
-  async createInvites(input: { count: number; expiresInDays: number; createdBy: string } & Limits) {
-    const expiresAt = new Date(this.now().getTime() + input.expiresInDays * 86_400_000);
-    const created: { id: string; code: string; expiresAt: Date }[] = [];
-    for (let i = 0; i < input.count; i++) {
-      const code = newInviteCode();
-      const [row] = await this.db
-        .insert(invites)
-        .values({
-          codeHash: hashInviteCode(code),
-          codeHint: code.slice(-4),
-          monthlyBudgetUsd: usd(input.monthlyBudgetUsd),
-          windowLimitUsd: usd(input.windowLimitUsd),
-          expiresAt,
-          createdBy: input.createdBy,
-        })
-        .returning({ id: invites.id });
-      created.push({ id: row!.id, code, expiresAt });
-    }
-    return created;
-  }
-
-  async listInvites(): Promise<InviteView[]> {
-    const rows = await this.db
-      .select({ invite: invites, usedByEmail: users.email })
-      .from(invites)
-      .leftJoin(users, eq(invites.usedBy, users.id))
-      .orderBy(desc(invites.createdAt))
-      .limit(200);
+  /** Новых аккаунтов с этого адреса сегодня уже слишком много - отказ (защита от потока пустых гостей и регистраций). */
+  private async assertSignupAllowed(ipHash: string): Promise<void> {
     const now = this.now();
-    return rows.map(({ invite, usedByEmail }) => ({
-      id: invite.id,
-      codeHint: invite.codeHint,
-      monthlyBudgetUsd: invite.monthlyBudgetUsd === null ? null : Number(invite.monthlyBudgetUsd),
-      windowLimitUsd: invite.windowLimitUsd === null ? null : Number(invite.windowLimitUsd),
-      expiresAt: invite.expiresAt,
-      createdAt: invite.createdAt,
-      usedAt: invite.usedAt,
-      usedByEmail,
-      status: invite.usedAt ? "used" : invite.revokedAt ? "revoked" : invite.expiresAt <= now ? "expired" : "active",
-    }));
+    const day = utcDay(now);
+    const [row] = await this.db
+      .select({ total: sql<string>`count(*)` })
+      .from(users)
+      .where(and(eq(users.signupIpHash, ipHash), gte(users.createdAt, day.start)));
+    if (Number(row?.total ?? 0) >= this.policy.signupIpDailyCap) {
+      throw new AppError(
+        "signup_limit",
+        `Слишком много новых аккаунтов с вашего адреса. Попробуйте через ${humanDuration(day.end.getTime() - now.getTime())}.`,
+        429,
+        day.end.toISOString(),
+      );
+    }
   }
 
-  async revokeInvite(id: string): Promise<boolean> {
-    const rows = await this.db
-      .update(invites)
-      .set({ revokedAt: this.now() })
-      .where(and(eq(invites.id, id), isNull(invites.usedAt), isNull(invites.revokedAt)))
-      .returning({ id: invites.id });
-    return rows.length > 0;
+  /** Гость: аккаунт без email и пароля, нужен, чтобы вести бесплатные запросы и историю до регистрации. */
+  async createGuest(input: { ipHash: string }) {
+    await this.assertSignupAllowed(input.ipHash);
+    const [user] = await this.db
+      .insert(users)
+      .values({
+        role: "public",
+        monthlyBudgetUsd: usd(this.policy.publicDefaults.monthlyBudgetUsd),
+        windowLimitUsd: usd(this.policy.publicDefaults.windowLimitUsd),
+        signupIpHash: input.ipHash,
+        createdAt: this.now(),
+      })
+      .returning();
+    return { user: toPublic(user!), ...(await this.createSession(user!.id, "internal")) };
   }
 
-  /** Регистрация публичного пользователя по приглашению. Приглашение гасится в той же транзакции, что и создание аккаунта. */
-  async register(input: { email: string; password: string; inviteCode: string }) {
+  /**
+   * Регистрация. Если у посетителя уже есть гостевая сессия, гость становится настоящим аккаунтом: история диалогов и
+   * счётчик бесплатных запросов сохраняются. Сессия при этом заменяется новой (старый токен перестаёт действовать).
+   * Без гостевой сессии создаётся новый аккаунт.
+   */
+  async register(input: { email: string; password: string; guestToken?: string; ipHash: string }) {
     assertPasswordAcceptable(input.password);
     const passwordHash = await this.hasher.hash(input.password);
-    const codeHash = hashInviteCode(input.inviteCode);
-    const now = this.now();
-    let user: UserRow;
+    const email = normalizeEmail(input.email);
+
+    const guest = input.guestToken ? await this.authenticate(input.guestToken, "internal") : null;
+    let user: UserRow | undefined;
     try {
-      user = await this.db.transaction(async (tx) => {
-        const [invite] = await tx.select().from(invites).where(eq(invites.codeHash, codeHash)).for("update");
-        if (!invite || invite.usedAt || invite.revokedAt || invite.expiresAt <= now) throw invalidInvite();
-        const [created] = await tx
+      if (guest?.guest) {
+        // Условие email is null защищает от двух одновременных регистраций одного гостя: выиграет одна.
+        [user] = await this.db
+          .update(users)
+          .set({ email, passwordHash })
+          .where(and(eq(users.id, guest.userId), isNull(users.email)))
+          .returning();
+      }
+      if (!user) {
+        await this.assertSignupAllowed(input.ipHash);
+        [user] = await this.db
           .insert(users)
           .values({
-            email: normalizeEmail(input.email),
+            email,
             passwordHash,
             role: "public",
-            monthlyBudgetUsd: invite.monthlyBudgetUsd,
-            windowLimitUsd: invite.windowLimitUsd,
+            monthlyBudgetUsd: usd(this.policy.publicDefaults.monthlyBudgetUsd),
+            windowLimitUsd: usd(this.policy.publicDefaults.windowLimitUsd),
+            signupIpHash: input.ipHash,
+            createdAt: this.now(),
           })
           .returning();
-        await tx.update(invites).set({ usedBy: created!.id, usedAt: now }).where(eq(invites.id, invite.id));
-        return created!;
-      });
+      }
     } catch (error) {
       if (isUniqueViolation(error)) throw emailTaken();
       throw error;
     }
-    return { user: toPublic(user), ...(await this.createSession(user.id, "internal")) };
+    // Вход заменяет гостевую сессию: после повышения прав старый токен действовать не должен.
+    await this.revokeUserSessions(user!.id);
+    return { user: toPublic(user!), ...(await this.createSession(user!.id, "internal")) };
   }
 
   async login(input: { email: string; password: string; entry: Entry }) {
@@ -184,7 +181,7 @@ export class AuthService {
     const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
     const now = this.now();
 
-    if (!user) {
+    if (!user || !user.passwordHash) {
       // Тратим столько же времени, сколько на реальную проверку: по скорости ответа нельзя узнать, есть ли аккаунт.
       await this.hasher.verify(input.password, await this.hasher.dummy);
       throw invalidCredentials();
@@ -238,7 +235,7 @@ export class AuthService {
     if (now.getTime() - row.session.lastUsedAt.getTime() > TOUCH_INTERVAL_MS) {
       await this.db.update(authSessions).set({ lastUsedAt: now }).where(eq(authSessions.id, row.session.id));
     }
-    return { userId: row.user.id, email: row.user.email, role: row.user.role, entry };
+    return { userId: row.user.id, email: row.user.email, role: row.user.role, entry, guest: row.user.email === null };
   }
 
   async logout(token: string | undefined): Promise<void> {
@@ -257,13 +254,64 @@ export class AuthService {
     const rows = await this.db
       .update(users)
       .set({ passwordHash, failedLogins: 0, lockedUntil: null })
-      .where(eq(users.id, userId))
+      .where(and(eq(users.id, userId), sql`${users.email} is not null`))
       .returning({ id: users.id });
     if (!rows.length) throw errors.notFound("Пользователь не найден.");
     await this.revokeUserSessions(userId);
   }
 
+  /** Подписка: до какого момента действует (null - снять). Только для публичных аккаунтов. */
+  async setSubscription(userId: string, until: Date | null): Promise<Date | null> {
+    const rows = await this.db
+      .update(users)
+      .set({ subscribedUntil: until })
+      .where(and(eq(users.id, userId), eq(users.role, "public")))
+      .returning({ subscribedUntil: users.subscribedUntil });
+    if (!rows.length) throw errors.notFound("Публичный пользователь не найден.");
+    return rows[0]!.subscribedUntil;
+  }
+
+  /** Продлевает подписку на N суток: от текущего конца, а если она закончилась или её не было - от сегодня. */
+  async extendSubscription(userId: string, days: number): Promise<Date> {
+    const now = this.now();
+    const [user] = await this.db
+      .select({ subscribedUntil: users.subscribedUntil })
+      .from(users)
+      .where(and(eq(users.id, userId), eq(users.role, "public")))
+      .limit(1);
+    if (!user) throw errors.notFound("Публичный пользователь не найден.");
+    const base = user.subscribedUntil && user.subscribedUntil > now ? user.subscribedUntil : now;
+    const until = new Date(base.getTime() + days * 86_400_000);
+    await this.setSubscription(userId, until);
+    return until;
+  }
+
   async purgeExpired(): Promise<void> {
     await this.db.delete(authSessions).where(sql`${authSessions.expiresAt} <= ${this.now().toISOString()}::timestamptz`);
+  }
+
+  /**
+   * Уборка гостей: диалоги гостей без активности дольше срока удаляются, а сами гостевые аккаунты - если по ним нет ни диалогов,
+   * ни записей учёта расходов (учёт трогать нельзя). Настоящие пользователи не затрагиваются.
+   */
+  async purgeGuests(retentionDays: number): Promise<{ conversations: number; guests: number }> {
+    const cutoff = new Date(this.now().getTime() - retentionDays * 86_400_000);
+    const guestIds = this.db.select({ id: users.id }).from(users).where(isNull(users.email));
+    const removedConversations = await this.db
+      .delete(conversations)
+      .where(and(inArray(conversations.userId, guestIds), lt(conversations.updatedAt, cutoff)))
+      .returning({ id: conversations.id });
+    const removedGuests = await this.db
+      .delete(users)
+      .where(
+        and(
+          isNull(users.email),
+          lt(users.createdAt, cutoff),
+          sql`not exists (select 1 from conversations c where c.user_id = ${users.id})`,
+          sql`not exists (select 1 from usage_events e where e.user_id = ${users.id})`,
+        ),
+      )
+      .returning({ id: users.id });
+    return { conversations: removedConversations.length, guests: removedGuests.length };
   }
 }

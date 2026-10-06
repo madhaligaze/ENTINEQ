@@ -7,7 +7,7 @@ import { ZodError } from "zod";
 import type { AgentRunner } from "./agent/types.js";
 import { AuthService } from "./auth/service.js";
 import { PasswordHasher } from "./auth/password.js";
-import { ChatService } from "./chat/service.js";
+import { ChatService, type Runners } from "./chat/service.js";
 import type { Config } from "./config.js";
 import type { Db } from "./db/index.js";
 import { sql } from "drizzle-orm";
@@ -19,7 +19,12 @@ import type { AppContext } from "./routes/context.js";
 export interface AppDeps {
   cfg: Config;
   db: Db;
+  /** Движок агента с терминалом в контейнере ядра (владелец и доверенные). */
   runner: AgentRunner;
+  /** Публичный чат без инструментов. Не задан - тот же раннер (так устроены заглушка и тесты). */
+  chatRunner?: AgentRunner;
+  /** Терминал в изолированной песочнице для подписчиков. Нужен, если SANDBOX_MODE=managed; не задан - тот же раннер. */
+  sandboxRunner?: AgentRunner;
   hasher?: PasswordHasher;
   now?: () => Date;
 }
@@ -83,8 +88,16 @@ export async function buildApp(deps: AppDeps): Promise<BuiltApp> {
   await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
 
   const hasher = deps.hasher ?? new PasswordHasher();
-  const auth = new AuthService(db, cfg.sessionTtlDays, hasher, deps.now);
-  const chat = new ChatService({ db, runner: deps.runner, cfg, log: app.log, now: deps.now });
+  const auth = new AuthService(db, cfg.sessionTtlDays, hasher, deps.now, {
+    signupIpDailyCap: cfg.signup.ipDailyCap,
+    publicDefaults: cfg.defaults.public,
+  });
+  const runners: Runners = {
+    agent: deps.runner,
+    chat: deps.chatRunner ?? deps.runner,
+    managed: cfg.sandbox.mode === "managed" ? (deps.sandboxRunner ?? deps.runner) : null,
+  };
+  const chat = new ChatService({ db, runners, cfg, log: app.log, now: deps.now });
   const ctx: AppContext = { cfg, db, auth, chat };
 
   /** Корень - просто «жив ли и что за сервис»: пригодится, когда адрес бэкенда открывают в браузере. */

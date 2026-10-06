@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import type { ServerEvent } from "../chat/service.js";
+import type { ServerEvent, TurnMeta } from "../chat/service.js";
 import { AppError } from "../errors.js";
 import { clientMessage } from "../schemas.js";
 import type { Actor } from "../types.js";
@@ -27,6 +27,7 @@ export function serveChat(
   ctx: AppContext,
   resolveActor: () => Promise<Actor | null>,
   log: { error: (...args: unknown[]) => void },
+  meta: TurnMeta = {},
 ): void {
   let alive = true;
   socket.on("pong", () => {
@@ -70,7 +71,7 @@ export function serveChat(
         closeCode = CLOSE_UNAUTHORIZED;
         return;
       }
-      await ctx.chat.runTurn(actor, { text: message.text, conversationId: message.conversationId }, send);
+      await ctx.chat.runTurn(actor, { text: message.text, conversationId: message.conversationId, mode: message.mode }, send, meta);
     } catch (error) {
       send(toErrorEvent(error, log));
     } finally {

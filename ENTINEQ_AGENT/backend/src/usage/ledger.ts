@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, gte, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
+import type { AccessInfo, FreeStatus, Plan } from "../access.js";
 import type { Db } from "../db/index.js";
 import { conversations, usageEvents, users, type UsageSnapshot } from "../db/schema.js";
+import { humanDuration, money } from "./format.js";
+
+export { humanDuration };
 
 export type Snapshot = UsageSnapshot;
 type ModelTotals = Snapshot[string];
@@ -169,6 +173,13 @@ export async function getLimitStatus(db: Db, user: LimitedUser, windowHours: num
 }
 
 export interface UsageDto {
+  plan: Plan;
+  /** Бесплатная квота: только у плана free. */
+  free: FreeStatus | null;
+  /** Подписка: у публичных пользователей; у владельца и доверенных - null. */
+  subscription: { active: boolean; until: string | null } | null;
+  subscribe: { url: string | null; hint: string };
+  terminal: "available" | "subscription" | "off";
   month: string;
   monthSpentUsd: number;
   monthBudgetUsd: number | null;
@@ -183,33 +194,51 @@ export interface UsageDto {
   };
 }
 
-export function usageDto(status: LimitStatus): UsageDto {
+/**
+ * Лимиты для интерфейса. На бесплатном плане окно и месячный предел не действуют (там считается число запросов),
+ * поэтому они показываются пустыми: интерфейс не должен рисовать полосу, которая ни на что не влияет.
+ */
+export function usageDto(status: LimitStatus, access: AccessInfo): UsageDto {
+  const free = access.plan === "free";
   return {
+    plan: access.plan,
+    free: access.free,
+    subscription: access.subscription,
+    subscribe: access.subscribe,
+    terminal: access.terminal,
     month: status.month,
     monthSpentUsd: round(status.monthSpentUsd, 6),
-    monthBudgetUsd: status.monthBudgetUsd,
+    monthBudgetUsd: free ? null : status.monthBudgetUsd,
     monthResetsAt: status.monthResetsAt.toISOString(),
-    window: {
-      hours: status.windowHours,
-      active: status.windowActive,
-      startedAt: status.windowStartedAt?.toISOString() ?? null,
-      resetsAt: status.windowResetsAt?.toISOString() ?? null,
-      spentUsd: round(status.windowSpentUsd, 6),
-      limitUsd: status.windowLimitUsd,
-    },
+    window: free
+      ? { hours: status.windowHours, active: false, startedAt: null, resetsAt: null, spentUsd: 0, limitUsd: null }
+      : {
+          hours: status.windowHours,
+          active: status.windowActive,
+          startedAt: status.windowStartedAt?.toISOString() ?? null,
+          resetsAt: status.windowResetsAt?.toISOString() ?? null,
+          spentUsd: round(status.windowSpentUsd, 6),
+          limitUsd: status.windowLimitUsd,
+        },
   };
 }
 
-export function humanDuration(ms: number): string {
-  const minutes = Math.max(1, Math.ceil(ms / 60_000));
-  if (minutes >= 48 * 60) return `${Math.ceil(minutes / (24 * 60))} дн.`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h && m) return `${h} ч ${m} мин`;
-  return h ? `${h} ч` : `${m} мин`;
+/** Лимиты посетителя, у которого ещё нет аккаунта: ничего не потрачено. */
+export function emptyLimitStatus(windowHours: number, now: Date): LimitStatus {
+  const bounds = monthBounds(now);
+  return {
+    month: bounds.key,
+    monthResetsAt: bounds.end,
+    monthSpentUsd: 0,
+    monthBudgetUsd: null,
+    windowHours,
+    windowActive: false,
+    windowStartedAt: null,
+    windowResetsAt: null,
+    windowSpentUsd: 0,
+    windowLimitUsd: null,
+  };
 }
-
-const money = (value: number) => `$${value < 0.01 && value > 0 ? value.toFixed(4) : value.toFixed(2)}`;
 
 export interface Block {
   code: "budget_exceeded" | "session_limit";
@@ -267,6 +296,18 @@ export async function openWindow(db: Db, userId: string, windowHours: number, no
   return current.windowStartedAt;
 }
 
+/** Итоги одной модели как прирост за ход (для движков, которые отдают расход только этого хода, а не нарастающий). */
+function totalsAsDeltas(next: Snapshot): ModelDelta[] {
+  const deltas: ModelDelta[] = [];
+  for (const [model, totals] of Object.entries(next)) {
+    const delta: ModelDelta = { model, ...totals, costUSD: round(totals.costUSD) };
+    if (COUNTERS.some((field) => delta[field] > 0)) deltas.push(delta);
+  }
+  return deltas;
+}
+
+export type RecordMode = UsageMode | "delta" | "ignored";
+
 export async function recordTurnUsage(
   db: Db,
   input: {
@@ -280,44 +321,63 @@ export async function recordTurnUsage(
     at: Date;
     /** Токены самого этого вызова (поле usage результата SDK) - по ним определяется, накопительные ли итоги. */
     callTokens?: number;
+    /**
+     * cumulative - итоги нарастающие (Agent SDK, Managed Agents): расход хода - разница с прошлыми;
+     * delta - итоги только этого хода (Messages API): они и есть расход.
+     */
+    usageMode?: "cumulative" | "delta";
+    /** Ход оплачен из бесплатной квоты. */
+    isFree?: boolean;
   },
-): Promise<{ deltaUsd: number; mode: UsageMode | "ignored" }> {
+): Promise<{ deltaUsd: number; mode: RecordMode }> {
   if (isZeroSnapshot(input.next)) return { deltaUsd: 0, mode: "ignored" };
+  const delta = input.usageMode === "delta";
   return db.transaction(async (tx) => {
-    const [conversation] = await tx
-      .select({ snapshot: conversations.usageSnapshot })
-      .from(conversations)
-      .where(eq(conversations.id, input.conversationId))
-      .for("update");
-    const previous: Snapshot = input.sessionChanged ? {} : (conversation?.snapshot ?? {});
-    const mode = classifyUsage(previous, input.next, input.callTokens);
-    const deltas = diffUsage(previous, input.next, input.callTokens);
+    let mode: RecordMode = "delta";
+    let deltas: ModelDelta[];
+    if (delta) {
+      deltas = totalsAsDeltas(input.next);
+    } else {
+      const [conversation] = await tx
+        .select({ snapshot: conversations.usageSnapshot })
+        .from(conversations)
+        .where(eq(conversations.id, input.conversationId))
+        .for("update");
+      const previous: Snapshot = input.sessionChanged ? {} : (conversation?.snapshot ?? {});
+      mode = classifyUsage(previous, input.next, input.callTokens);
+      deltas = diffUsage(previous, input.next, input.callTokens);
+    }
     if (deltas.length) {
       const turnId = randomUUID();
       await tx.insert(usageEvents).values(
-        deltas.map((delta) => ({
+        deltas.map((item) => ({
           turnId,
           userId: input.userId,
           conversationId: input.conversationId,
-          model: delta.model,
-          inputTokens: Math.round(delta.inputTokens),
-          outputTokens: Math.round(delta.outputTokens),
-          cacheReadTokens: Math.round(delta.cacheReadInputTokens),
-          cacheCreationTokens: Math.round(delta.cacheCreationInputTokens),
-          costUsd: delta.costUSD.toFixed(8),
+          model: item.model,
+          inputTokens: Math.round(item.inputTokens),
+          outputTokens: Math.round(item.outputTokens),
+          cacheReadTokens: Math.round(item.cacheReadInputTokens),
+          cacheCreationTokens: Math.round(item.cacheCreationInputTokens),
+          costUsd: item.costUSD.toFixed(8),
           outcome: input.outcome,
           windowStart: input.windowStart,
+          isFree: input.isFree ?? false,
           createdAt: input.at,
         })),
       );
     }
-    await tx.update(conversations).set({ usageSnapshot: input.next, updatedAt: input.at }).where(eq(conversations.id, input.conversationId));
-    return { deltaUsd: round(deltas.reduce((sum, delta) => sum + delta.costUSD, 0)), mode };
+    await tx
+      .update(conversations)
+      .set(delta ? { updatedAt: input.at } : { usageSnapshot: input.next, updatedAt: input.at })
+      .where(eq(conversations.id, input.conversationId));
+    return { deltaUsd: round(deltas.reduce((sum, item) => sum + item.costUSD, 0)), mode };
   });
 }
 
 export interface UsageReportRow {
   userId: string;
+  /** У строки «Гости» - подпись с числом гостей. */
   email: string;
   role: string;
   turns: number;
@@ -326,39 +386,71 @@ export interface UsageReportRow {
   cacheReadTokens: number;
   cacheCreationTokens: number;
   costUsd: number;
+  /** Часть расхода, оплаченная из бесплатной квоты. */
+  freeCostUsd: number;
 }
 
-export async function usageReport(db: Db, bounds: MonthBounds): Promise<{ rows: UsageReportRow[]; totalUsd: number }> {
+type ReportAggregates = {
+  turns: string;
+  inputTokens: string;
+  outputTokens: string;
+  cacheReadTokens: string;
+  cacheCreationTokens: string;
+  costUsd: string;
+  freeCostUsd: string;
+};
+
+const convertAggregates = (row: ReportAggregates) => ({
+  turns: Number(row.turns),
+  inputTokens: Number(row.inputTokens),
+  outputTokens: Number(row.outputTokens),
+  cacheReadTokens: Number(row.cacheReadTokens),
+  cacheCreationTokens: Number(row.cacheCreationTokens),
+  costUsd: round(Number(row.costUsd), 6),
+  freeCostUsd: round(Number(row.freeCostUsd), 6),
+});
+
+/** Отчёт за месяц: по строке на каждого настоящего пользователя и одна общая строка на всех гостей. */
+export async function usageReport(
+  db: Db,
+  bounds: MonthBounds,
+): Promise<{ rows: UsageReportRow[]; totalUsd: number; totalFreeUsd: number }> {
   const cost = sql<string>`coalesce(sum(${usageEvents.costUsd}), 0)`;
-  const rows = await db
-    .select({
-      userId: users.id,
-      email: users.email,
-      role: users.role,
-      turns: sql<string>`count(distinct ${usageEvents.turnId})`,
-      inputTokens: sql<string>`coalesce(sum(${usageEvents.inputTokens}), 0)`,
-      outputTokens: sql<string>`coalesce(sum(${usageEvents.outputTokens}), 0)`,
-      cacheReadTokens: sql<string>`coalesce(sum(${usageEvents.cacheReadTokens}), 0)`,
-      cacheCreationTokens: sql<string>`coalesce(sum(${usageEvents.cacheCreationTokens}), 0)`,
-      costUsd: cost,
-    })
+  const aggregates = {
+    turns: sql<string>`count(distinct ${usageEvents.turnId})`,
+    inputTokens: sql<string>`coalesce(sum(${usageEvents.inputTokens}), 0)`,
+    outputTokens: sql<string>`coalesce(sum(${usageEvents.outputTokens}), 0)`,
+    cacheReadTokens: sql<string>`coalesce(sum(${usageEvents.cacheReadTokens}), 0)`,
+    cacheCreationTokens: sql<string>`coalesce(sum(${usageEvents.cacheCreationTokens}), 0)`,
+    costUsd: cost,
+    freeCostUsd: sql<string>`coalesce(sum(case when ${usageEvents.isFree} then ${usageEvents.costUsd} else 0 end), 0)`,
+  };
+  const inMonth = and(eq(usageEvents.userId, users.id), gte(usageEvents.createdAt, bounds.start), lt(usageEvents.createdAt, bounds.end));
+
+  const people = await db
+    .select({ userId: users.id, email: users.email, role: users.role, ...aggregates })
     .from(users)
-    .leftJoin(
-      usageEvents,
-      and(eq(usageEvents.userId, users.id), gte(usageEvents.createdAt, bounds.start), lt(usageEvents.createdAt, bounds.end)),
-    )
+    .leftJoin(usageEvents, inMonth)
+    .where(isNotNull(users.email))
     .groupBy(users.id)
     .orderBy(desc(cost), users.email);
-  const mapped = rows.map((row) => ({
-    userId: row.userId,
-    email: row.email,
-    role: row.role,
-    turns: Number(row.turns),
-    inputTokens: Number(row.inputTokens),
-    outputTokens: Number(row.outputTokens),
-    cacheReadTokens: Number(row.cacheReadTokens),
-    cacheCreationTokens: Number(row.cacheCreationTokens),
-    costUsd: round(Number(row.costUsd), 6),
-  }));
-  return { rows: mapped, totalUsd: round(mapped.reduce((sum, row) => sum + row.costUsd, 0), 6) };
+  const [guests] = await db
+    .select({ guests: sql<string>`count(distinct ${users.id})`, ...aggregates })
+    .from(users)
+    .leftJoin(usageEvents, inMonth)
+    .where(isNull(users.email));
+
+  const rows: UsageReportRow[] = people.map((row) => ({ userId: row.userId, email: row.email ?? "", role: row.role, ...convertAggregates(row) }));
+  const guestCount = Number(guests?.guests ?? 0);
+  if (guests && guestCount > 0) {
+    const summary = convertAggregates(guests);
+    // Гости без расходов в отчёт не попадают: он нужен, чтобы видеть, куда уходят деньги.
+    if (summary.turns > 0) rows.push({ userId: "guests", email: `Гости (${guestCount})`, role: "public", ...summary });
+  }
+  rows.sort((a, b) => b.costUsd - a.costUsd || a.email.localeCompare(b.email));
+  return {
+    rows,
+    totalUsd: round(rows.reduce((sum, row) => sum + row.costUsd, 0), 6),
+    totalFreeUsd: round(rows.reduce((sum, row) => sum + row.freeCostUsd, 0), 6),
+  };
 }

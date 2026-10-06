@@ -1,16 +1,27 @@
-/* Общие помощники для сквозных тестов. Playwright берётся из глобальной установки (см. ~/.node_modules). */
+/* Общие помощники для сквозных тестов. Playwright берётся из node_modules этой папки. */
 const { spawn, execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const PSQL = "C:\\Users\\user\\scoop\\apps\\postgresql\\current\\bin\\psql.exe";
-const PG = { host: "127.0.0.1", port: "54329", user: "postgres" };
+/** psql: явный PSQL, локальный Scoop на этой машине, иначе команда из PATH (так его ставит CI). */
+function psqlBin() {
+  if (process.env.PSQL) return process.env.PSQL;
+  const scoop = "C:\\Users\\user\\scoop\\apps\\postgresql\\current\\bin\\psql.exe";
+  if (process.platform === "win32" && fs.existsSync(scoop)) return scoop;
+  return "psql";
+}
+
+const PG = {
+  host: process.env.PGHOST || "127.0.0.1",
+  port: process.env.PGPORT || "54329",
+  user: process.env.PGUSER || "postgres",
+};
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function sql(db, statement) {
-  return execFileSync(PSQL, ["-h", PG.host, "-p", PG.port, "-U", PG.user, "-d", db, "-tAc", statement], { encoding: "utf8" }).trim();
+  return execFileSync(psqlBin(), ["-h", PG.host, "-p", PG.port, "-U", PG.user, "-d", db, "-tAc", statement], { encoding: "utf8" }).trim();
 }
 
 function recreateDb(name) {

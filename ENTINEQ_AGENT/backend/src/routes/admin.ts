@@ -1,8 +1,9 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { planOf } from "../access.js";
 import { users } from "../db/schema.js";
 import { errors } from "../errors.js";
-import { createInvitesBody, createUserBody, idParam, monthQuery, patchUserBody } from "../schemas.js";
+import { createUserBody, idParam, monthQuery, patchUserBody } from "../schemas.js";
 import type { Actor } from "../types.js";
 import { monthBounds, parseMonthKey, usageReport } from "../usage/ledger.js";
 import type { AppContext } from "./context.js";
@@ -14,22 +15,31 @@ const num = (value: string | null) => (value === null ? null : Number(value));
 export function registerAdmin(scope: FastifyInstance, ctx: AppContext, ownerOf: (req: FastifyRequest) => Promise<Actor>): void {
   const { db, auth, cfg } = ctx;
 
+  const view = (row: typeof users.$inferSelect, spent?: number) => ({
+    id: row.id,
+    email: row.email ?? "",
+    role: row.role,
+    isActive: row.isActive,
+    monthlyBudgetUsd: num(row.monthlyBudgetUsd),
+    windowLimitUsd: num(row.windowLimitUsd),
+    plan: planOf(row, new Date()),
+    freeUsed: row.freeUsed,
+    subscribedUntil: row.subscribedUntil?.toISOString() ?? null,
+    ...(spent === undefined ? {} : { spentThisMonthUsd: spent }),
+    createdAt: row.createdAt.toISOString(),
+  });
+
   scope.get("/admin/users", async (req) => {
     await ownerOf(req);
-    const rows = await db.select().from(users).orderBy(asc(users.createdAt));
+    // Гости (аккаунты без почты) в список не попадают: их много и управлять ими нечем. Показываем только их число.
+    const rows = await db.select().from(users).where(isNotNull(users.email)).orderBy(asc(users.createdAt));
+    const [guests] = await db.select({ total: sql<string>`count(*)` }).from(users).where(isNull(users.email));
     const { rows: report } = await usageReport(db, monthBounds(new Date()));
     const spent = new Map(report.map((row) => [row.userId, row.costUsd]));
     return {
-      users: rows.map((row) => ({
-        id: row.id,
-        email: row.email,
-        role: row.role,
-        isActive: row.isActive,
-        monthlyBudgetUsd: num(row.monthlyBudgetUsd),
-        windowLimitUsd: num(row.windowLimitUsd),
-        spentThisMonthUsd: spent.get(row.id) ?? 0,
-        createdAt: row.createdAt.toISOString(),
-      })),
+      users: rows.map((row) => view(row, spent.get(row.id) ?? 0)),
+      guests: Number(guests?.total ?? 0),
+      freeRequests: cfg.free.requests,
     };
   });
 
@@ -56,62 +66,26 @@ export function registerAdmin(scope: FastifyInstance, ctx: AppContext, ownerOf: 
     if (body.isActive === false && (target.id === actor.userId || target.role === "owner")) {
       throw errors.invalid("Нельзя отключить владельца.");
     }
+    if ((body.subscribedUntil !== undefined || body.subscriptionDays !== undefined) && target.role !== "public") {
+      throw errors.invalid("Подписка нужна только публичным пользователям.");
+    }
+    if (body.password !== undefined && target.email === null) {
+      throw errors.invalid("У гостя нет пароля.");
+    }
 
     const changes: Partial<typeof users.$inferInsert> = {};
     if (body.monthlyBudgetUsd !== undefined) changes.monthlyBudgetUsd = usd(body.monthlyBudgetUsd);
     if (body.windowLimitUsd !== undefined) changes.windowLimitUsd = usd(body.windowLimitUsd);
     if (body.isActive !== undefined) changes.isActive = body.isActive;
     if (Object.keys(changes).length) await db.update(users).set(changes).where(eq(users.id, id));
+    if (body.subscribedUntil !== undefined) await auth.setSubscription(id, body.subscribedUntil === null ? null : new Date(body.subscribedUntil));
+    if (body.subscriptionDays !== undefined) await auth.extendSubscription(id, body.subscriptionDays);
     if (body.password !== undefined) await auth.setPassword(id, body.password);
     // Отключённого пользователя сразу выкидываем из всех открытых входов.
     if (body.isActive === false) await auth.revokeUserSessions(id);
 
     const [updated] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return {
-      user: {
-        id: updated!.id,
-        email: updated!.email,
-        role: updated!.role,
-        isActive: updated!.isActive,
-        monthlyBudgetUsd: num(updated!.monthlyBudgetUsd),
-        windowLimitUsd: num(updated!.windowLimitUsd),
-      },
-    };
-  });
-
-  scope.get("/admin/invites", async (req) => {
-    await ownerOf(req);
-    const rows = await auth.listInvites();
-    return {
-      invites: rows.map((row) => ({
-        ...row,
-        expiresAt: row.expiresAt.toISOString(),
-        createdAt: row.createdAt.toISOString(),
-        usedAt: row.usedAt?.toISOString() ?? null,
-      })),
-    };
-  });
-
-  scope.post("/admin/invites", async (req, reply) => {
-    const actor = await ownerOf(req);
-    const body = createInvitesBody.parse(req.body ?? {});
-    const defaults = cfg.defaults.public;
-    const created = await auth.createInvites({
-      count: body.count,
-      expiresInDays: body.expiresInDays,
-      createdBy: actor.userId,
-      monthlyBudgetUsd: body.monthlyBudgetUsd === undefined ? defaults.monthlyBudgetUsd : body.monthlyBudgetUsd,
-      windowLimitUsd: body.windowLimitUsd === undefined ? defaults.windowLimitUsd : body.windowLimitUsd,
-    });
-    // Коды показываются только сейчас: в БД хранится лишь их хеш.
-    return reply.code(201).send({ invites: created.map((invite) => ({ ...invite, expiresAt: invite.expiresAt.toISOString() })) });
-  });
-
-  scope.delete("/admin/invites/:id", async (req, reply) => {
-    await ownerOf(req);
-    const { id } = idParam.parse(req.params);
-    if (!(await auth.revokeInvite(id))) throw errors.notFound("Приглашение не найдено или уже использовано.");
-    return reply.code(204).send();
+    return { user: view(updated!) };
   });
 
   scope.get("/admin/usage", async (req) => {
@@ -119,6 +93,6 @@ export function registerAdmin(scope: FastifyInstance, ctx: AppContext, ownerOf: 
     const { month } = monthQuery.parse(req.query);
     const bounds = month ? parseMonthKey(month)! : monthBounds(new Date());
     const report = await usageReport(db, bounds);
-    return { month: bounds.key, users: report.rows, totalUsd: report.totalUsd };
+    return { month: bounds.key, users: report.rows, totalUsd: report.totalUsd, totalFreeUsd: report.totalFreeUsd };
   });
 }

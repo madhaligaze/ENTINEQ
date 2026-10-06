@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { safeEqual } from "../auth/tokens.js";
 import type { Config } from "../config.js";
 import { AppError, errors } from "../errors.js";
+import { hashIpBucket, ipBucket } from "../net/ip.js";
 
 /** Cookie собственного входа ENTINEQ_AGENT. Имя отличается от cookie публичного приложения: на localhost cookie общие для всех портов. */
 export const SESSION_COOKIE = "entineq_agent_session";
@@ -20,6 +21,14 @@ export function assertInternalSecret(req: FastifyRequest, secret: string): void 
   const authorization = header(req, "authorization") ?? "";
   const presented = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   if (!presented || !safeEqual(presented, secret)) throw new AppError("internal_unauthorized", "Нет доступа.", 401);
+}
+
+/**
+ * Отпечаток адреса посетителя, который приложение ENTINEQ передаёт во внутренней двери (заголовок X-Client-IP, значение берётся из его
+ * надёжной цепочки прокси). Доверяем ему только потому, что внутренняя дверь закрыта общим секретом.
+ */
+export function clientIpHash(req: FastifyRequest, secret: string): string {
+  return hashIpBucket(secret, ipBucket(header(req, "x-client-ip")));
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

@@ -14,15 +14,24 @@ export const ENTRY_ROLES: Record<Entry, readonly Role[]> = {
   internal: ["public"],
 };
 
+/**
+ * Чем ведётся диалог (см. conversations.engine в db/schema.ts):
+ * agent - Claude Agent SDK в контейнере ядра, chat - обычный чат без инструментов, managed - терминал в песочнице Anthropic.
+ */
+export type Engine = "agent" | "chat" | "managed";
+
 export interface Actor {
   userId: string;
-  email: string;
+  /** null - гость: аккаунт без входа. */
+  email: string | null;
   role: Role;
   entry: Entry;
+  guest: boolean;
 }
 
 export interface PublicUser {
   id: string;
-  email: string;
+  email: string | null;
   role: Role;
+  guest: boolean;
 }
